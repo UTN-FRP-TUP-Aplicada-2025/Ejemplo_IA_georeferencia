@@ -5,7 +5,7 @@
     <MudAppBar Color="Color.Primary" Fixed="true" Dense="true">
         <MudText Typo="Typo.h6" Class="mr-4">GeoFoto</MudText>
         <MudIconButton Icon="@Icons.Material.Filled.Map"
-                       OnClick='() => Nav.NavigateTo("/")'
+                       OnClick="NavAMapa"
                        title="Mapa" Color="Color.Inherit" />
         <MudIconButton Icon="@Icons.Material.Filled.Upload"
                        OnClick='() => Nav.NavigateTo("/subir")'
@@ -28,4 +28,18 @@
 
 @code {
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private void NavAMapa()
+    {
+        var uri = Nav.Uri;
+        var baseUri = Nav.BaseUri.TrimEnd('/');
+        var estaEnMapa = uri == baseUri + "/"
+                      || uri.StartsWith(baseUri + "/?")
+                      || uri == baseUri + "/mapa"
+                      || uri.StartsWith(baseUri + "/mapa?");
+        if (estaEnMapa)
+            Nav.NavigateTo($"/mapa?t={DateTimeOffset.UtcNow.ToUnixTimeMilliseconds()}");
+        else
+            Nav.NavigateTo("/mapa");
+    }
 }

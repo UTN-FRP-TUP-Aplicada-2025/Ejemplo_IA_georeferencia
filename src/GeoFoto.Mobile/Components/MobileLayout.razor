@@ -13,6 +13,42 @@
     Style="position:fixed;z-index:1000;"
         OnClick="AbrirCamara" />
 
+@if (_sinConexion)
+{
+    <div style="position:fixed;inset:0;z-index:9999;
+                background:rgba(18,18,18,.94);
+                display:flex;flex-direction:column;align-items:center;justify-content:center;
+                padding:32px;text-align:center;">
+        <MudIcon Icon="@Icons.Material.Filled.WifiOff"
+                 Style="font-size:80px;color:#ef5350;opacity:.85;"
+                 Class="mb-4" />
+        <MudText Typo="Typo.h5" Style="color:white;" Class="mb-2">Sin conexión a internet</MudText>
+        <MudText Typo="Typo.body1"
+                 Style="color:rgba(255,255,255,.65);max-width:300px;"
+                 Class="mb-6">
+            Verificá que estés conectado a Wi-Fi o que tengas datos móviles disponibles.
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="VerificarConexion"
+                   Disabled="_verificando"
+                   Size="Size.Large"
+                   Class="mb-3">
+            @if (_verificando)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Reintentar
+        </MudButton>
+        <MudButton Variant="Variant.Text"
+                   Style="color:rgba(255,255,255,.5);"
+                   OnClick="ContinuarSinConexion">
+            Continuar sin conexión
+        </MudButton>
+    </div>
+}
+
 @code {
     [Inject] private ICamaraService Camara { get; set; } = default!;
     [Inject] private IFotoUploadStrategy UploadStrategy { get; set; } = default!;
@@ -22,12 +58,22 @@
 
     private ISyncService? _syncService;
     private bool _syncInicializado;
+    private IConnectivityService? _connectivityService;
+    private bool _sinConexion;
+    private bool _verificando;
 
     protected override void OnInitialized()
     {
         _syncService = SP.GetService<ISyncService>();
         if (_syncService is not null)
             _syncService.SyncCompleted += OnSyncCompleted;
+
+        _connectivityService = SP.GetService<IConnectivityService>();
+        if (_connectivityService is not null)
+        {
+            _sinConexion = !_connectivityService.IsConnected;
+            _connectivityService.ConnectivityChanged += OnConnectivityChanged;
+        }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
@@ -76,17 +122,18 @@
                 if (result is not null)
                 {
                     Snackbar.Add($"Foto capturada — Punto #{result.PuntoId}", Severity.Success);
+                    var t = DateTimeOffset.UtcNow.ToUnixTimeMilliseconds();
                     if (result.Latitud.HasValue)
                     {
                         var lat = result.Latitud!.Value.ToString("F7",
                             System.Globalization.CultureInfo.InvariantCulture);
                         var lng = result.Longitud!.Value.ToString("F7",
                             System.Globalization.CultureInfo.InvariantCulture);
-                        Nav.NavigateTo($"/?lat={lat}&lng={lng}&puntoId={result.PuntoId}");
+                        Nav.NavigateTo($"/?t={t}&lat={lat}&lng={lng}&puntoId={result.PuntoId}");
                     }
                     else
                     {
-                        Nav.NavigateTo("/");
+                        Nav.NavigateTo($"/?t={t}");
                     }
                 }
                 else
@@ -122,9 +169,57 @@
         });
     }
 
+    private void OnConnectivityChanged(object? sender, bool isConnected)
+    {
+        InvokeAsync(() =>
+        {
+            if (isConnected)
+            {
+                _sinConexion = false;
+                _verificando = false;
+                Snackbar.Add("Conexión restaurada",
+                    Severity.Success,
+                    cfg => { cfg.VisibleStateDuration = 3000; cfg.ShowCloseIcon = false; });
+            }
+            else
+            {
+                Snackbar.Add("Sin conexión a internet",
+                    Severity.Warning,
+                    cfg => { cfg.VisibleStateDuration = 6000; });
+            }
+            StateHasChanged();
+        });
+    }
+
+    private async Task VerificarConexion()
+    {
+        _verificando = true;
+        StateHasChanged();
+        await Task.Delay(600);
+        if (_connectivityService is not null && _connectivityService.IsConnected)
+        {
+            _sinConexion = false;
+            Snackbar.Add("Conexión disponible",
+                Severity.Success,
+                cfg => { cfg.VisibleStateDuration = 3000; cfg.ShowCloseIcon = false; });
+        }
+        _verificando = false;
+        StateHasChanged();
+    }
+
+    private void ContinuarSinConexion()
+    {
+        _sinConexion = false;
+        Snackbar.Add("Modo sin conexión activo — los datos se sincronizarán cuando haya internet",
+            Severity.Info,
+            cfg => { cfg.VisibleStateDuration = 5000; });
+    }
+
     public void Dispose()
     {
         if (_syncService is not null)
             _syncService.SyncCompleted -= OnSyncCompleted;
+        if (_connectivityService is not null)
+            _connectivityService.ConnectivityChanged -= OnConnectivityChanged;
     }
 }

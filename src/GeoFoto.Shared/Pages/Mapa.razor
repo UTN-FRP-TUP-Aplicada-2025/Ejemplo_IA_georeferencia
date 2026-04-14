@@ -17,12 +17,33 @@
 
 <PageTitle>Mapa - GeoFoto</PageTitle>
 
-@if (_error is not null)
+@if (_errorConexion)
 {
-    <MudAlert Severity="Severity.Error" Class="ma-4">@_error</MudAlert>
+    <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;
+                height:calc(100dvh - var(--total-top-offset) - var(--nav-bar-height)); padding:24px; text-align:center;">
+        <MudIcon Icon="@Icons.Material.Filled.CloudOff"
+                 Color="Color.Error"
+                 Style="font-size:72px; opacity:.55;"
+                 Class="mb-4" />
+        <MudText Typo="Typo.h5" Class="mb-2">Sin conexión al servidor</MudText>
+        <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-6" Style="max-width:320px;">
+            @_errorMsg
+        </MudText>
+        <MudButton Variant="Variant.Filled"
+                   Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Refresh"
+                   OnClick="ReintentarCarga"
+                   Size="Size.Large"
+                   Disabled="_cargando">
+            @if (_cargando)
+            {
+                <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mr-2" />
+            }
+            Reintentar
+        </MudButton>
+    </div>
 }
-
-@if (_cargando)
+else if (_cargando)
 {
     <MudContainer MaxWidth="MaxWidth.False" Class="pa-0">
         <MudSkeleton SkeletonType="SkeletonType.Rectangle"
@@ -85,7 +106,10 @@ else
     private List<PuntoDto> _puntos = new();
     private bool _cargando = true;
     private bool _mapaListo;
-    private string? _error;
+    private bool _mapaInicializado;
+    private bool _errorConexion;
+    private string? _errorMsg;
+    private string? _lastRefreshToken;
     private bool _buscandoGps;
     private string? _gpsError;
     private bool _mostrarDialogoGps;
@@ -94,6 +118,10 @@ else
     private bool _usarDatosLocales;
     private bool _centradoInicialPorGps;
     private bool _gpsInicialIntentado;
+    private UbicacionResult? _gpsInicial;
+
+    [SupplyParameterFromQuery(Name = "t")]
+    public string? RefreshToken { get; set; }
 
     [SupplyParameterFromQuery(Name = "puntoId")]
     public int? NuevoPuntoId { get; set; }
@@ -110,39 +138,88 @@ else
         _localDb = SP.GetService<ILocalDbService>();
         _usarDatosLocales = _localDb is not null;
 
+        // Lanzar GPS de inmediato para pedir permisos antes de que el mapa se inicialice
+        var tareaGps = _ubicacionService is not null
+            ? ObtenerGpsInicialAsync()
+            : Task.CompletedTask;
+
         try
         {
             await CargarPuntosAsync();
-            _error = null;
         }
         catch (GeoFotoApiException ex)
         {
-            _error = ex.Message;
+            _errorConexion = true;
+            _errorMsg = ex.Message;
             Logger.LogError(ex, "Error cargando puntos");
         }
-        finally
+        catch (Exception ex)
         {
-            _cargando = false;
+            _errorConexion = true;
+            _errorMsg = "No se pudo conectar con el servidor";
+            Logger.LogError(ex, "Error inesperado cargando puntos");
+        }
+
+        // Esperar GPS (máx. 1.5 s) — con last-known location responde en < 200 ms.
+        // Si no responde a tiempo, OnAfterRenderAsync centra el mapa cuando llegue.
+        await Task.WhenAny(tareaGps, Task.Delay(1500));
+        _cargando = false;
+    }
+
+    protected override async Task OnParametersSetAsync()
+    {
+        if (!string.IsNullOrEmpty(RefreshToken) && RefreshToken != _lastRefreshToken && !_cargando)
+        {
+            _lastRefreshToken = RefreshToken;
+            await ReintentarCarga();
         }
     }
 
     protected override async Task OnAfterRenderAsync(bool firstRender)
     {
         if (firstRender)
-        {
             _dotnetRef = DotNetObjectReference.Create(this);
-            await JS.InvokeVoidAsync("leafletInterop.initMap", "map", -34.6037, -58.3816, 13);
+
+        if (_cargando || _errorConexion)
+            return;
+
+        // Inicializar el mapa la primera vez que el div #map está visible
+        if (!_mapaInicializado)
+        {
+            _mapaInicializado = true;
+            _gpsInicialIntentado = true;
+
+            // Usar ubicación real si ya está disponible; si no, coordenadas por defecto (Buenos Aires)
+            var initLat = _gpsInicial?.Latitud ?? -34.6037;
+            var initLng = _gpsInicial?.Longitud ?? -58.3816;
+            var initZoom = _gpsInicial is not null ? 15 : 13;
+
+            await JS.InvokeVoidAsync("leafletInterop.initMap", "map", initLat, initLng, initZoom);
             _mapaListo = true;
 
-            if (!_gpsInicialIntentado)
+            if (_gpsInicial is not null)
             {
-                _gpsInicialIntentado = true;
-                await IntentarCentradoInicialAsync();
+                _centradoInicialPorGps = true;
+                await JS.InvokeVoidAsync("leafletInterop.mostrarPosicionGps",
+                    _gpsInicial.Latitud, _gpsInicial.Longitud, _gpsInicial.Precision);
             }
+            // Si GPS aún no llegó (timeout), el else-if de abajo lo centra
+            // cuando ObtenerGpsInicialAsync dispare StateHasChanged
+        }
+        else if (_mapaListo && _gpsInicial is not null && !_centradoInicialPorGps)
+        {
+            // GPS llegó después de que el mapa se inicializó — centrar ahora sin reiniciar
+            _centradoInicialPorGps = true;
+            await JS.InvokeVoidAsync("leafletInterop.mostrarPosicionGps",
+                _gpsInicial.Latitud, _gpsInicial.Longitud, _gpsInicial.Precision);
         }
 
         if (_mapaListo)
         {
+            // Forzar recalculo del tamaño del contenedor — evita mapa en blanco
+            // cuando el WebView cambió de dimensiones (ej: volver de la cámara)
+            await JS.InvokeVoidAsync("leafletInterop.invalidateSize");
+
             var ajustarMapa = !_centradoInicialPorGps
                 && string.IsNullOrEmpty(NuevaLat)
                 && string.IsNullOrEmpty(NuevaLng);
@@ -170,6 +247,46 @@ else
                 NuevoPuntoId = null;
             }
         }
+    }
+
+    private async Task ReintentarCarga()
+    {
+        _cargando = true;
+        _errorConexion = false;
+        _errorMsg = null;
+        _mapaInicializado = false;
+        _mapaListo = false;
+        _gpsInicialIntentado = false;
+        _centradoInicialPorGps = false;
+        _gpsInicial = null;
+        StateHasChanged();
+
+        // Re-lanzar GPS en paralelo para que el mapa se centre al reinicializar
+        var tareaGps = _ubicacionService is not null
+            ? ObtenerGpsInicialAsync()
+            : Task.CompletedTask;
+
+        try
+        {
+            await CargarPuntosAsync();
+        }
+        catch (GeoFotoApiException ex)
+        {
+            _errorConexion = true;
+            _errorMsg = ex.Message;
+            Logger.LogError(ex, "Error al reintentar carga de puntos");
+        }
+        catch (Exception ex)
+        {
+            _errorConexion = true;
+            _errorMsg = "No se pudo conectar con el servidor";
+            Logger.LogError(ex, "Error inesperado al reintentar");
+        }
+
+        // Breve espera GPS — con last-known es instantáneo
+        await Task.WhenAny(tareaGps, Task.Delay(1500));
+        _cargando = false;
+        StateHasChanged();
     }
 
     private async Task CargarPuntosAsync()
@@ -205,12 +322,24 @@ else
             _puntos = puntosLocales
                 .OrderByDescending(p => p.FechaCreacion)
                 .ToList();
-            _error = null;
             return;
         }
 
         _puntos = await Api.GetPuntosAsync();
-        _error = null;
+    }
+
+    private async Task ObtenerGpsInicialAsync()
+    {
+        try
+        {
+            var result = await _ubicacionService!.ObtenerUbicacionAsync();
+            if (result.Ok)
+            {
+                _gpsInicial = result;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch { /* Error de GPS al iniciar — no crítico */ }
     }
 
     private async Task IntentarCentradoInicialAsync()

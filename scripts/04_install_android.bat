@@ -82,6 +82,11 @@ if errorlevel 1 (
 )
 echo   [OK] APK instalada correctamente
 
+:: Limpiar cache del WebView para evitar pantalla en blanco tras reinstall
+echo   [INFO] Limpiando cache WebView (previene pantalla en blanco)...
+"%ADB%" -s !DEVICE_ID! shell pm clear %APP_ID% >nul 2>&1
+echo   [OK] Cache limpia
+
 :: Lanzar la app
 echo   [INFO] Lanzando la app en el celular...
 timeout /t 2 /nobreak >nul

@@ -38,3 +38,6 @@ app.UseStaticFiles();
 app.MapControllers();
 
 app.Run();
+
+// Exponer Program para WebApplicationFactory en GeoFoto.Tests
+public partial class Program { }

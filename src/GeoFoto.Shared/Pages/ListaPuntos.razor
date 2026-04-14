@@ -20,17 +20,33 @@
                          Height="56px" Class="mb-2" Animation="Animation.Wave" />
         }
     }
+    else if (_error is not null)
+    {
+        <div style="display:flex; flex-direction:column; align-items:center; justify-content:center;
+                    min-height:300px; padding:24px; text-align:center;">
+            <MudIcon Icon="@Icons.Material.Filled.CloudOff"
+                     Color="Color.Error"
+                     Style="font-size:64px; opacity:.55;"
+                     Class="mb-3" />
+            <MudText Typo="Typo.h6" Class="mb-2">Sin conexión al servidor</MudText>
+            <MudText Typo="Typo.body1" Color="Color.Secondary" Class="mb-5" Style="max-width:360px;">
+                @_error
+            </MudText>
+            <MudButton Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Refresh"
+                       OnClick="ReintentarCarga"
+                       Size="Size.Large">
+                Reintentar
+            </MudButton>
+        </div>
+    }
     else
     {
         <MudTextField @bind-Value="_busqueda" Label="Buscar por nombre"
                   Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
                   Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
                   Immediate="true" />
-
-    @if (_error is not null)
-    {
-        <MudAlert Severity="Severity.Error" Class="mb-3">@_error</MudAlert>
-    }
 
     <MudTable Items="PuntosFiltrados" Hover="true" Dense="true" Loading="_cargando"
               RowsPerPage="20">
@@ -97,18 +113,36 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await CargarPuntosAsync();
+    }
+
+    private async Task CargarPuntosAsync()
+    {
         try
         {
             _puntos = (await Api.GetPuntosAsync()).ToList();
+            _error = null;
         }
         catch (GeoFotoApiException ex)
         {
             _error = ex.Message;
         }
+        catch (Exception)
+        {
+            _error = "No se pudo conectar con el servidor";
+        }
         finally
         {
             _cargando = false;
         }
+    }
+
+    private async Task ReintentarCarga()
+    {
+        _cargando = true;
+        _error = null;
+        StateHasChanged();
+        await CargarPuntosAsync();
     }
 
     private async Task AbrirDetalle(PuntoDto punto)
@@ -130,7 +164,8 @@
         var result = await dialog.Result;
         if (result is not null && !result.Canceled)
         {
-            _puntos = (await Api.GetPuntosAsync()).ToList();
+            try { _puntos = (await Api.GetPuntosAsync()).ToList(); }
+            catch { Snackbar.Add("No se pudo refrescar la lista", Severity.Warning); }
         }
     }
 
@@ -150,9 +185,16 @@
     {
         if (_puntoAEliminar is not null)
         {
-            await Api.DeletePuntoAsync(_puntoAEliminar.Id);
-            _puntos.Remove(_puntoAEliminar);
-            Snackbar.Add("Punto eliminado", Severity.Success);
+            try
+            {
+                await Api.DeletePuntoAsync(_puntoAEliminar.Id);
+                _puntos.Remove(_puntoAEliminar);
+                Snackbar.Add("Punto eliminado", Severity.Success);
+            }
+            catch (GeoFotoApiException ex)
+            {
+                Snackbar.Add($"Error al eliminar: {ex.Message}", Severity.Error);
+            }
         }
         _confirmVisible = false;
         _puntoAEliminar = null;

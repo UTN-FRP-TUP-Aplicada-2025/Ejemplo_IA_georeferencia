@@ -23,7 +23,15 @@ public class MauiUbicacionService : IUbicacionService
                     "Permiso de ubicación denegado", PermisoDenegado: true);
             }
 
-            var request = new GeolocationRequest(GeolocationAccuracy.Best, TimeSpan.FromSeconds(10));
+            // Intentar posición cacheada primero — respuesta instantánea para la carga inicial del mapa
+            var lastKnown = await Geolocation.Default.GetLastKnownLocationAsync();
+            if (lastKnown is not null && lastKnown.Accuracy is <= 200)
+            {
+                return new UbicacionResult(true,
+                    lastKnown.Latitude, lastKnown.Longitude, lastKnown.Accuracy ?? 50);
+            }
+
+            var request = new GeolocationRequest(GeolocationAccuracy.Medium, TimeSpan.FromSeconds(8));
             var location = await Geolocation.Default.GetLocationAsync(request);
 
             if (location is null)
