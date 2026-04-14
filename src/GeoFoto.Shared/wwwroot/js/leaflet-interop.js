@@ -37,9 +37,10 @@ window.leafletInterop = {
         } catch (e) { console.error('[GeoFoto] initMap:', e); }
     },
 
-    addMarkers: function (puntos, dotnetRef) {
+    addMarkers: function (puntos, dotnetRef, fitBounds) {
         if (!this.map || !this._clusterGroup) return;
         try {
+            var shouldFitBounds = fitBounds !== false;
             this._dotnetRef = dotnetRef;
             this._clusterGroup.clearLayers();
             this.markers = [];
@@ -73,7 +74,7 @@ window.leafletInterop = {
 
             this._clusterGroup.addLayers(this.markers);
 
-            if (puntos.length > 0 && this._clusterGroup.getBounds().isValid()) {
+            if (shouldFitBounds && puntos.length > 0 && this._clusterGroup.getBounds().isValid()) {
                 this.map.fitBounds(this._clusterGroup.getBounds().pad(0.1), { maxZoom: 14 });
             }
         } catch (e) { console.error('[GeoFoto] addMarkers:', e); }

@@ -30,6 +30,12 @@
     bottom: calc(24px + var(--nav-bar-height)) !important;
 }
 
+.mud-fab-fixed-bottom-left {
+    bottom: calc(24px + var(--nav-bar-height)) !important;
+    left: 16px !important;
+    right: auto !important;
+}
+
 /* Mapa: altura total menos las dos barras */
 #map {
     height: calc(100dvh - var(--total-top-offset) - var(--nav-bar-height));

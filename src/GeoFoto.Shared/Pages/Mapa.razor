@@ -5,6 +5,7 @@
 @using GeoFoto.Shared.Services
 @using Microsoft.Extensions.Logging
 @using Microsoft.Extensions.DependencyInjection
+@using System.Globalization
 @inject IGeoFotoApiClient Api
 @inject IJSRuntime JS
 @inject IDialogService DialogService
@@ -89,6 +90,10 @@ else
     private string? _gpsError;
     private bool _mostrarDialogoGps;
     private IUbicacionService? _ubicacionService;
+    private ILocalDbService? _localDb;
+    private bool _usarDatosLocales;
+    private bool _centradoInicialPorGps;
+    private bool _gpsInicialIntentado;
 
     [SupplyParameterFromQuery(Name = "puntoId")]
     public int? NuevoPuntoId { get; set; }
@@ -102,10 +107,12 @@ else
     protected override async Task OnInitializedAsync()
     {
         _ubicacionService = SP.GetService<IUbicacionService>();
+        _localDb = SP.GetService<ILocalDbService>();
+        _usarDatosLocales = _localDb is not null;
 
         try
         {
-            _puntos = await Api.GetPuntosAsync();
+            await CargarPuntosAsync();
             _error = null;
         }
         catch (GeoFotoApiException ex)
@@ -126,19 +133,29 @@ else
             _dotnetRef = DotNetObjectReference.Create(this);
             await JS.InvokeVoidAsync("leafletInterop.initMap", "map", -34.6037, -58.3816, 13);
             _mapaListo = true;
+
+            if (!_gpsInicialIntentado)
+            {
+                _gpsInicialIntentado = true;
+                await IntentarCentradoInicialAsync();
+            }
         }
 
-        if (_mapaListo && _puntos.Any())
+        if (_mapaListo)
         {
-            await JS.InvokeVoidAsync("leafletInterop.addMarkers", _puntos, _dotnetRef);
+            var ajustarMapa = !_centradoInicialPorGps
+                && string.IsNullOrEmpty(NuevaLat)
+                && string.IsNullOrEmpty(NuevaLng);
+
+            await JS.InvokeVoidAsync("leafletInterop.addMarkers", _puntos, _dotnetRef, ajustarMapa);
 
             // Si venimos de una subida: centrar en el punto recién creado
             if (!string.IsNullOrEmpty(NuevaLat) && !string.IsNullOrEmpty(NuevaLng))
             {
-                if (double.TryParse(NuevaLat, System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out var lat) &&
-                    double.TryParse(NuevaLng, System.Globalization.NumberStyles.Float,
-                        System.Globalization.CultureInfo.InvariantCulture, out var lng))
+                if (double.TryParse(NuevaLat, NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out var lat) &&
+                    double.TryParse(NuevaLng, NumberStyles.Float,
+                        CultureInfo.InvariantCulture, out var lng))
                 {
                     await JS.InvokeVoidAsync("leafletInterop.centrarEnCoordenadas", lat, lng, 16);
 
@@ -152,6 +169,76 @@ else
                 NuevaLng = null;
                 NuevoPuntoId = null;
             }
+        }
+    }
+
+    private async Task CargarPuntosAsync()
+    {
+        if (_usarDatosLocales && _localDb is not null)
+        {
+            await _localDb.InitializeAsync();
+            var locales = (await _localDb.GetPuntosAsync())
+                .Where(p => p.SyncStatus != SyncStatusValues.PendingDelete)
+                .ToList();
+
+            var puntosLocales = new List<PuntoDto>(locales.Count);
+            foreach (var p in locales)
+            {
+                var fotosActivas = (await _localDb.GetFotosByPuntoAsync(p.LocalId))
+                    .Count(f => f.SyncStatus != SyncStatusValues.PendingDelete);
+
+                var fecha = DateTime.TryParse(p.FechaCreacion, out var parsed)
+                    ? parsed
+                    : DateTime.UtcNow;
+
+                puntosLocales.Add(new PuntoDto(
+                    p.LocalId,
+                    p.Latitud,
+                    p.Longitud,
+                    p.Nombre,
+                    p.Descripcion,
+                    fecha,
+                    fotosActivas,
+                    null));
+            }
+
+            _puntos = puntosLocales
+                .OrderByDescending(p => p.FechaCreacion)
+                .ToList();
+            _error = null;
+            return;
+        }
+
+        _puntos = await Api.GetPuntosAsync();
+        _error = null;
+    }
+
+    private async Task IntentarCentradoInicialAsync()
+    {
+        if (_ubicacionService is null)
+            return;
+
+        try
+        {
+            var result = await _ubicacionService.ObtenerUbicacionAsync();
+            if (result.Ok)
+            {
+                await JS.InvokeVoidAsync("leafletInterop.mostrarPosicionGps",
+                    result.Latitud, result.Longitud, result.Precision);
+                _centradoInicialPorGps = true;
+                return;
+            }
+
+            if (result.PermisoDenegado)
+            {
+                _gpsError = result.Error;
+                _mostrarDialogoGps = true;
+                await InvokeAsync(StateHasChanged);
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogWarning(ex, "No se pudo centrar en GPS al iniciar");
         }
     }
 
@@ -172,6 +259,7 @@ else
                 {
                     await JS.InvokeVoidAsync("leafletInterop.mostrarPosicionGps",
                         result.Latitud, result.Longitud, result.Precision);
+                    _centradoInicialPorGps = true;
                     Snackbar.Add($"Ubicación obtenida — precisión: {Math.Round(result.Precision)}m",
                         Severity.Success);
                 }
@@ -215,6 +303,7 @@ else
     public Task OnGpsOk(double lat, double lng, double precision)
     {
         _buscandoGps = false;
+        _centradoInicialPorGps = true;
         Snackbar.Add($"Ubicación obtenida — precisión: {Math.Round(precision)}m", Severity.Success);
         StateHasChanged();
         return Task.CompletedTask;
@@ -233,11 +322,6 @@ else
     [JSInvokable]
     public async Task OnMarkerClicked(int puntoId)
     {
-        var parameters = new DialogParameters<GeoFoto.Shared.Components.DetallePunto>
-        {
-            { x => x.PuntoId, puntoId }
-        };
-
         var options = new DialogOptions
         {
             MaxWidth = MaxWidth.Medium,
@@ -245,16 +329,35 @@ else
             CloseOnEscapeKey = true
         };
 
-        var dialog = await DialogService.ShowAsync<GeoFoto.Shared.Components.DetallePunto>(
-            "Detalle del Punto", parameters, options);
+        IDialogReference dialog;
+        if (_usarDatosLocales)
+        {
+            var localParameters = new DialogParameters<GeoFoto.Shared.Components.DetallePuntoLocal>
+            {
+                { x => x.PuntoLocalId, puntoId }
+            };
+
+            dialog = await DialogService.ShowAsync<GeoFoto.Shared.Components.DetallePuntoLocal>(
+                "Detalle del Punto", localParameters, options);
+        }
+        else
+        {
+            var remoteParameters = new DialogParameters<GeoFoto.Shared.Components.DetallePunto>
+            {
+                { x => x.PuntoId, puntoId }
+            };
+
+            dialog = await DialogService.ShowAsync<GeoFoto.Shared.Components.DetallePunto>(
+                "Detalle del Punto", remoteParameters, options);
+        }
 
         var result = await dialog.Result;
         if (result is not null && !result.Canceled)
         {
-            _puntos = await Api.GetPuntosAsync();
+            await CargarPuntosAsync();
             if (_mapaListo)
             {
-                await JS.InvokeVoidAsync("leafletInterop.addMarkers", _puntos, _dotnetRef);
+                await JS.InvokeVoidAsync("leafletInterop.addMarkers", _puntos, _dotnetRef, false);
             }
         }
     }

@@ -27,4 +27,5 @@ public interface ILocalDbService
     Task MarkDoneAsync(int queueId, int? remoteId = null);
     Task MarkFailedAsync(int queueId, string error);
     Task IncrementAttemptsAsync(int queueId);
+    Task UpdatePendingCreatePayloadAsync(string entityType, int localId, string payload);
 }

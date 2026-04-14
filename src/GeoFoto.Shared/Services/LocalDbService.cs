@@ -174,4 +174,22 @@ public class LocalDbService : ILocalDbService
         item.LastAttemptAt = DateTime.UtcNow.ToString("O");
         await _db!.UpdateAsync(item);
     }
+
+    public async Task UpdatePendingCreatePayloadAsync(string entityType, int localId, string payload)
+    {
+        await EnsureInitializedAsync();
+
+        var pendingCreate = await _db!.Table<SyncQueueItem>()
+            .Where(q => q.EntityType == entityType
+                && q.LocalId == localId
+                && q.OperationType == "Create"
+                && q.Status == SyncQueueStatus.Pending)
+            .OrderByDescending(q => q.Id)
+            .FirstOrDefaultAsync();
+
+        if (pendingCreate is null) return;
+
+        pendingCreate.Payload = payload;
+        await _db.UpdateAsync(pendingCreate);
+    }
 }

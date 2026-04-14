@@ -1,0 +1,320 @@
+@using System.Text.Json
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceProvider SP
+@inject ISnackbar Snackbar
+@inject IJSRuntime JS
+
+<MudDialog>
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudIcon Icon="@Icons.Material.Filled.Place" Class="mr-1" />
+            <MudText Typo="Typo.h6">@(_nombre ?? $"Punto #{PuntoLocalId}")</MudText>
+        </MudStack>
+    </TitleContent>
+
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" Class="d-block mx-auto my-4" />
+        }
+        else if (_punto is null)
+        {
+            <MudAlert Severity="Severity.Error">No se encontró el punto local.</MudAlert>
+        }
+        else
+        {
+            @if (_fotos.Any())
+            {
+                <MudImage Src="@_fotos[_indiceFoto].DataUrl"
+                          Alt="@_fotos[_indiceFoto].NombreArchivo"
+                          ObjectFit="ObjectFit.Cover"
+                          Style="width:100%;height:220px;border-radius:8px;" />
+
+                <div style="display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;">
+                    @foreach (var (foto, i) in _fotos.Select((f, i) => (f, i)))
+                    {
+                        var idx = i;
+                        <div style="flex-shrink:0;width:54px;height:54px;border-radius:6px;overflow:hidden;
+                                    border:2px solid @(idx == _indiceFoto ? "var(--mud-palette-primary)" : "transparent");
+                                    cursor:pointer;"
+                             @onclick="() => _indiceFoto = idx">
+                            <MudImage Src="@foto.DataUrl" ObjectFit="ObjectFit.Cover" Style="width:100%;height:100%;" />
+                        </div>
+                    }
+                </div>
+
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                    Catálogo: @_fotos.Count foto(s)
+                </MudText>
+            }
+            else
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">Sin fotos asociadas a este punto.</MudAlert>
+            }
+
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+                @_punto.Latitud.ToString("F6")°, @_punto.Longitud.ToString("F6")°
+            </MudText>
+
+            <MudTextField @bind-Value="_nombre"
+                          Label="Nombre del punto"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense" />
+
+            <MudTextField @bind-Value="_descripcion"
+                          Label="Descripción"
+                          Variant="Variant.Outlined"
+                          Lines="3"
+                          Margin="Margin.Dense" />
+
+            <MudDivider Class="my-3" />
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Agregar foto al punto</MudText>
+
+            <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                           FilesChanged="OnAgregarFotos"
+                           Accept=".jpg,.jpeg,.png,.webp"
+                           MaximumFileCount="10"
+                           Disabled="_agregando">
+                <ChildContent>
+                    <MudButton HtmlTag="label"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.AddPhotoAlternate"
+                               Disabled="_agregando"
+                               Size="Size.Small">
+                        @(_agregando ? "Agregando..." : "Agregar fotos")
+                    </MudButton>
+                </ChildContent>
+            </MudFileUpload>
+
+            @if (_agregando)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-2" />
+            }
+
+            @if (_fotosAgregadas > 0)
+            {
+                <MudAlert Severity="Severity.Success" Dense="true" Class="mt-2">
+                    @_fotosAgregadas foto(s) agregada(s)
+                </MudAlert>
+            }
+        }
+    </DialogContent>
+
+    <DialogActions>
+        <MudIconButton Icon="@Icons.Material.Filled.MyLocation"
+                       OnClick="CentrarEnMapa"
+                       title="Centrar en el mapa"
+                       Disabled="_punto is null" />
+        <MudSpacer />
+        <MudButton OnClick="Cancel">Cerrar</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="Guardar"
+                   Disabled="_loading || _guardando || _punto is null">
+            @(_guardando ? "Guardando..." : "Guardar")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private sealed record FotoView(
+        int LocalId,
+        string NombreArchivo,
+        string DataUrl,
+        string? FechaTomada,
+        decimal? Latitud,
+        decimal? Longitud);
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int PuntoLocalId { get; set; }
+
+    private ILocalDbService? _localDb;
+    private LocalPunto? _punto;
+    private string? _nombre;
+    private string? _descripcion;
+    private List<FotoView> _fotos = new();
+    private bool _loading = true;
+    private bool _guardando;
+    private bool _agregando;
+    private int _fotosAgregadas;
+    private int _indiceFoto;
+    private string _directorioFotos = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+        "photos");
+
+    protected override async Task OnInitializedAsync()
+    {
+        _localDb = SP.GetService<ILocalDbService>();
+        if (_localDb is null)
+        {
+            _loading = false;
+            return;
+        }
+
+        await _localDb.InitializeAsync();
+        await CargarPuntoAsync();
+        _loading = false;
+    }
+
+    private async Task CargarPuntoAsync()
+    {
+        if (_localDb is null) return;
+
+        _punto = await _localDb.GetPuntoAsync(PuntoLocalId);
+        if (_punto is null) return;
+
+        _nombre = _punto.Nombre;
+        _descripcion = _punto.Descripcion;
+
+        var fotos = (await _localDb.GetFotosByPuntoAsync(_punto.LocalId))
+            .Where(f => f.SyncStatus != SyncStatusValues.PendingDelete)
+            .ToList();
+
+        var dirExistente = fotos
+            .Select(f => Path.GetDirectoryName(f.RutaLocal))
+            .FirstOrDefault(d => !string.IsNullOrWhiteSpace(d));
+        if (!string.IsNullOrWhiteSpace(dirExistente))
+            _directorioFotos = dirExistente;
+
+        var vistas = new List<FotoView>(fotos.Count);
+        foreach (var foto in fotos)
+        {
+            var dataUrl = await ConvertirADataUrlAsync(foto.RutaLocal);
+            if (dataUrl is null) continue;
+
+            vistas.Add(new FotoView(
+                foto.LocalId,
+                foto.NombreArchivo,
+                dataUrl,
+                foto.FechaTomada,
+                foto.LatitudExif,
+                foto.LongitudExif));
+        }
+
+        _fotos = vistas;
+        if (_indiceFoto >= _fotos.Count)
+            _indiceFoto = _fotos.Count == 0 ? 0 : _fotos.Count - 1;
+    }
+
+    private async Task<string?> ConvertirADataUrlAsync(string ruta)
+    {
+        if (string.IsNullOrWhiteSpace(ruta) || !File.Exists(ruta))
+            return null;
+
+        var bytes = await File.ReadAllBytesAsync(ruta);
+        var ext = Path.GetExtension(ruta).ToLowerInvariant();
+        var mime = ext switch
+        {
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            _ => "image/jpeg"
+        };
+
+        return $"data:{mime};base64,{Convert.ToBase64String(bytes)}";
+    }
+
+    private async Task Guardar()
+    {
+        if (_localDb is null || _punto is null)
+            return;
+
+        _guardando = true;
+        try
+        {
+            _punto.Nombre = _nombre;
+            _punto.Descripcion = _descripcion;
+
+            var estadoOriginal = _punto.SyncStatus;
+            if (estadoOriginal == SyncStatusValues.PendingCreate || estadoOriginal == SyncStatusValues.Local)
+            {
+                await _localDb.UpdatePuntoAsync(_punto);
+                await _localDb.UpdatePendingCreatePayloadAsync("Punto", _punto.LocalId, JsonSerializer.Serialize(_punto));
+            }
+            else
+            {
+                _punto.SyncStatus = SyncStatusValues.PendingUpdate;
+                await _localDb.UpdatePuntoAsync(_punto);
+                await _localDb.EnqueueAsync("Update", "Punto", _punto.LocalId, JsonSerializer.Serialize(_punto));
+            }
+
+            Snackbar.Add("Punto actualizado", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al guardar: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _guardando = false;
+        }
+    }
+
+    private async Task OnAgregarFotos(IReadOnlyList<IBrowserFile> files)
+    {
+        if (_localDb is null || _punto is null || files.Count == 0)
+            return;
+
+        _agregando = true;
+        _fotosAgregadas = 0;
+        StateHasChanged();
+
+        try
+        {
+            foreach (var file in files)
+            {
+                using var ms = new MemoryStream();
+                await using var input = file.OpenReadStream(maxAllowedSize: 52_428_800);
+                await input.CopyToAsync(ms);
+                ms.Position = 0;
+
+                Directory.CreateDirectory(_directorioFotos);
+
+                var ext = Path.GetExtension(file.Name);
+                if (string.IsNullOrWhiteSpace(ext))
+                    ext = ".jpg";
+
+                var path = Path.Combine(_directorioFotos, $"{Guid.NewGuid()}{ext}");
+                await using (var fs = File.Create(path))
+                {
+                    await ms.CopyToAsync(fs);
+                }
+
+                var foto = new LocalFoto
+                {
+                    PuntoLocalId = _punto.LocalId,
+                    NombreArchivo = file.Name,
+                    RutaLocal = path,
+                    FechaTomada = DateTime.UtcNow.ToString("O"),
+                    TamanoBytes = ms.Length,
+                    SyncStatus = SyncStatusValues.PendingCreate
+                };
+
+                var fotoLocalId = await _localDb.InsertFotoAsync(foto);
+                await _localDb.EnqueueAsync("Create", "Foto", fotoLocalId, JsonSerializer.Serialize(foto));
+                _fotosAgregadas++;
+            }
+
+            await CargarPuntoAsync();
+            Snackbar.Add($"{_fotosAgregadas} foto(s) agregada(s)", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al agregar fotos: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _agregando = false;
+            StateHasChanged();
+        }
+    }
+
+    private async Task CentrarEnMapa()
+    {
+        if (_punto is not null)
+            await JS.InvokeVoidAsync("leafletInterop.centerOn", (double)_punto.Latitud, (double)_punto.Longitud);
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

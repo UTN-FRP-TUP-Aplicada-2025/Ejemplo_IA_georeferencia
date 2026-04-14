@@ -54,6 +54,7 @@ public class LocalUploadStrategy : IFotoUploadStrategy
             punto = await _db.FindPuntoCercanoAsync(lat!.Value, lng!.Value);
 
         int puntoLocalId;
+        var puntoCreado = false;
         if (punto is null)
         {
             punto = new LocalPunto
@@ -64,6 +65,7 @@ public class LocalUploadStrategy : IFotoUploadStrategy
                 SyncStatus = SyncStatusValues.PendingCreate
             };
             puntoLocalId = await _db.InsertPuntoAsync(punto);
+            puntoCreado = true;
         }
         else
         {
@@ -85,8 +87,11 @@ public class LocalUploadStrategy : IFotoUploadStrategy
         var fotoLocalId = await _db.InsertFotoAsync(foto);
 
         // 5. Enqueue sync operations
-        await _db.EnqueueAsync("Create", "Punto", puntoLocalId,
-            JsonSerializer.Serialize(punto));
+        if (puntoCreado)
+        {
+            await _db.EnqueueAsync("Create", "Punto", puntoLocalId,
+                JsonSerializer.Serialize(punto));
+        }
         await _db.EnqueueAsync("Create", "Foto", fotoLocalId,
             JsonSerializer.Serialize(foto));
 
