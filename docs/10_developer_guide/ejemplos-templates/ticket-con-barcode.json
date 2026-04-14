@@ -1,0 +1,72 @@
+{
+  "id": "ticket-con-barcode",
+  "version": "1.0",
+  "metadata": {
+    "descripcion": "Comprobante de pago con código de barras EAN13 — 58mm (32 chars)",
+    "autor": "developer-guide",
+    "anchoRecomendado": 32
+  },
+  "root": {
+    "type": "container",
+    "layout": "vertical",
+    "children": [
+      {
+        "type": "text",
+        "text": "{{nombreOrganismo}}",
+        "style": { "align": "center", "bold": true }
+      },
+      {
+        "type": "text",
+        "text": ""
+      },
+      {
+        "type": "text",
+        "text": "Comp. N°: {{nroComprobante}}"
+      },
+      {
+        "type": "image",
+        "source": "{{nroComprobante}}",
+        "imageType": "barcode",
+        "style": { "align": "center" }
+      },
+      {
+        "type": "text",
+        "text": "================================"
+      },
+      {
+        "type": "text",
+        "text": "Cliente: {{cliente.nombre}}"
+      },
+      {
+        "type": "text",
+        "text": "CUIT/DNI: {{cliente.cuitDni}}"
+      },
+      {
+        "type": "text",
+        "text": ""
+      },
+      {
+        "type": "text",
+        "text": "Concepto: {{concepto}}"
+      },
+      {
+        "type": "text",
+        "text": "Importe: ${{importe}}",
+        "style": { "align": "center", "bold": true }
+      },
+      {
+        "type": "text",
+        "text": "Vencimiento: {{fechaVencimiento}}"
+      },
+      {
+        "type": "text",
+        "text": "================================"
+      },
+      {
+        "type": "text",
+        "text": "Conserve este comprobante",
+        "style": { "align": "center" }
+      }
+    ]
+  }
+}

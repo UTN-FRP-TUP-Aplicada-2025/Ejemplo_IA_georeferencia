@@ -1,0 +1,153 @@
+{
+  "id": "acta-infraccion",
+  "version": "1.0",
+  "metadata": {
+    "descripcion": "Acta de infracción de tránsito — 58mm (32 chars)",
+    "autor": "developer-guide",
+    "anchoRecomendado": 32,
+    "requiereCapability": "supports_qrcode (opcional, solo si permitePagoOnline)"
+  },
+  "root": {
+    "type": "container",
+    "layout": "vertical",
+    "children": [
+      {
+        "type": "text",
+        "text": "{{nombreOrganismo}}",
+        "style": { "align": "center", "bold": true }
+      },
+      {
+        "type": "text",
+        "text": "ACTA DE INFRACCIÓN",
+        "style": { "align": "center", "bold": true }
+      },
+      {
+        "type": "text",
+        "text": "================================"
+      },
+      {
+        "type": "text",
+        "text": "Apellido y nombre:"
+      },
+      {
+        "type": "text",
+        "text": "  {{infractor.apellido}}, {{infractor.nombre}}"
+      },
+      {
+        "type": "text",
+        "text": "DNI: {{infractor.dni}}"
+      },
+      {
+        "type": "text",
+        "text": "Domicilio: {{infractor.domicilio}}"
+      },
+      {
+        "type": "text",
+        "text": "================================"
+      },
+      {
+        "type": "text",
+        "text": "Patente: {{vehiculo.patente}}"
+      },
+      {
+        "type": "text",
+        "text": "Marca/Modelo: {{vehiculo.marca}} {{vehiculo.modelo}}"
+      },
+      {
+        "type": "text",
+        "text": "================================"
+      },
+      {
+        "type": "text",
+        "text": "INFRACCIONES:",
+        "style": { "bold": true }
+      },
+      {
+        "type": "loop",
+        "source": "infracciones",
+        "itemAlias": "infraccion",
+        "body": {
+          "type": "container",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "text",
+              "text": "Art. {{infraccion.articulo}}"
+            },
+            {
+              "type": "text",
+              "text": "  {{infraccion.descripcion}}"
+            },
+            {
+              "type": "text",
+              "text": "  Puntos: {{infraccion.puntos}}"
+            },
+            {
+              "type": "text",
+              "text": ""
+            }
+          ]
+        }
+      },
+      {
+        "type": "text",
+        "text": "================================"
+      },
+      {
+        "type": "text",
+        "text": "TOTAL: ${{montoTotal}}",
+        "style": { "align": "center", "bold": true }
+      },
+      {
+        "type": "text",
+        "text": "Vto. pago: {{fechaVencimiento}}"
+      },
+      {
+        "type": "text",
+        "text": ""
+      },
+      {
+        "type": "conditional",
+        "expression": "permitePagoOnline == true",
+        "trueBranch": {
+          "type": "container",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "text",
+              "text": "Paga en linea:",
+              "style": { "align": "center" }
+            },
+            {
+              "type": "image",
+              "source": "{{urlPago}}",
+              "imageType": "qrcode",
+              "width": 200,
+              "style": { "align": "center" }
+            }
+          ]
+        }
+      },
+      {
+        "type": "text",
+        "text": "================================"
+      },
+      {
+        "type": "text",
+        "text": "{{lugar}}, {{fechaActa}}"
+      },
+      {
+        "type": "text",
+        "text": ""
+      },
+      {
+        "type": "text",
+        "text": "Firma del agente:"
+      },
+      {
+        "type": "text",
+        "text": "________________________________"
+      }
+    ]
+  }
+}

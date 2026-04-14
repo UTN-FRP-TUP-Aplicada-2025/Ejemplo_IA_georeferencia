@@ -1,0 +1,83 @@
+{
+  "id": "ticket-simple",
+  "version": "1.0",
+  "metadata": {
+    "descripcion": "Ticket de venta simple — 58mm (32 chars)",
+    "autor": "developer-guide",
+    "anchoRecomendado": 32
+  },
+  "root": {
+    "type": "container",
+    "layout": "vertical",
+    "children": [
+      {
+        "type": "text",
+        "text": "{{nombreNegocio}}",
+        "style": { "align": "center", "bold": true }
+      },
+      {
+        "type": "text",
+        "text": "Fecha: {{fecha}}",
+        "style": { "align": "left" }
+      },
+      {
+        "type": "text",
+        "text": "================================"
+      },
+      {
+        "type": "loop",
+        "source": "items",
+        "itemAlias": "item",
+        "body": {
+          "type": "container",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "container",
+              "layout": "horizontal",
+              "children": [
+                {
+                  "type": "text",
+                  "text": "{{item.nombre}}"
+                },
+                {
+                  "type": "text",
+                  "text": "{{item.cantidad}} x ${{item.precio}} = ${{item.total}}",
+                  "style": { "align": "right" }
+                }
+              ]
+            }
+          ]
+        }
+      },
+      {
+        "type": "text",
+        "text": "================================"
+      },
+      {
+        "type": "text",
+        "text": "Subtotal: ${{subtotal}}",
+        "style": { "align": "right" }
+      },
+      {
+        "type": "text",
+        "text": "Impuesto: ${{impuesto}}",
+        "style": { "align": "right" }
+      },
+      {
+        "type": "text",
+        "text": "TOTAL: ${{total}}",
+        "style": { "align": "center", "bold": true }
+      },
+      {
+        "type": "text",
+        "text": ""
+      },
+      {
+        "type": "text",
+        "text": "{{footer}}",
+        "style": { "align": "center" }
+      }
+    ]
+  }
+}

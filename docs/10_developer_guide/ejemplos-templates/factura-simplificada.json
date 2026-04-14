@@ -1,0 +1,116 @@
+{
+  "id": "factura-simplificada",
+  "version": "1.0",
+  "metadata": {
+    "descripcion": "Factura simplificada con tabla de items y QR AFIP — 80mm (48 chars)",
+    "autor": "developer-guide",
+    "anchoRecomendado": 48,
+    "requiereCapability": "supports_qrcode (opcional, solo si esFacturaElectronica)"
+  },
+  "root": {
+    "type": "container",
+    "layout": "vertical",
+    "children": [
+      {
+        "type": "text",
+        "text": "{{empresa.nombre}}",
+        "style": { "align": "center", "bold": true }
+      },
+      {
+        "type": "text",
+        "text": "CUIT: {{empresa.cuit}}",
+        "style": { "align": "center" }
+      },
+      {
+        "type": "text",
+        "text": "FACTURA {{tipoFactura}} N° {{nroFactura}}",
+        "style": { "align": "center", "bold": true }
+      },
+      {
+        "type": "text",
+        "text": "================================================"
+      },
+      {
+        "type": "text",
+        "text": "A nombre de: {{cliente.razonSocial}}"
+      },
+      {
+        "type": "text",
+        "text": "CUIT: {{cliente.cuit}}"
+      },
+      {
+        "type": "text",
+        "text": "Condicion IVA: {{cliente.condicionIva}}"
+      },
+      {
+        "type": "text",
+        "text": "================================================"
+      },
+      {
+        "type": "table",
+        "headers": ["Descripcion", "Cant", "Precio", "Total"],
+        "rows": [
+          ["{{item.descripcion}}", "{{item.cantidad}}", "${{item.precioUnitario}}", "${{item.total}}"]
+        ],
+        "style": { "bold": true }
+      },
+      {
+        "type": "text",
+        "text": "================================================"
+      },
+      {
+        "type": "text",
+        "text": "Subtotal: ${{subtotal}}",
+        "style": { "align": "right" }
+      },
+      {
+        "type": "conditional",
+        "expression": "aplicaIva == true",
+        "trueBranch": {
+          "type": "text",
+          "text": "IVA 21%: ${{iva}}",
+          "style": { "align": "right" }
+        }
+      },
+      {
+        "type": "text",
+        "text": "TOTAL: ${{total}}",
+        "style": { "align": "center", "bold": true }
+      },
+      {
+        "type": "text",
+        "text": "================================================"
+      },
+      {
+        "type": "conditional",
+        "expression": "esFacturaElectronica == true",
+        "trueBranch": {
+          "type": "container",
+          "layout": "vertical",
+          "children": [
+            {
+              "type": "text",
+              "text": "CAE: {{cae}}"
+            },
+            {
+              "type": "text",
+              "text": "Vto CAE: {{vencimientoCAE}}"
+            },
+            {
+              "type": "image",
+              "source": "{{urlAfip}}",
+              "imageType": "qrcode",
+              "width": 200,
+              "style": { "align": "center" }
+            }
+          ]
+        },
+        "falseBranch": {
+          "type": "text",
+          "text": "Documento no valido como factura",
+          "style": { "align": "center" }
+        }
+      }
+    ]
+  }
+}
