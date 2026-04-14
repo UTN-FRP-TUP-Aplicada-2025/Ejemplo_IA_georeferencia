@@ -1,0 +1,266 @@
+@page "/"
+@page "/mapa"
+@attribute [StreamRendering]
+@using GeoFoto.Shared.Models
+@using GeoFoto.Shared.Services
+@using Microsoft.Extensions.Logging
+@using Microsoft.Extensions.DependencyInjection
+@inject IGeoFotoApiClient Api
+@inject IJSRuntime JS
+@inject IDialogService DialogService
+@inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject ILogger<Mapa> Logger
+@inject IServiceProvider SP
+@implements IDisposable
+
+<PageTitle>Mapa - GeoFoto</PageTitle>
+
+@if (_error is not null)
+{
+    <MudAlert Severity="Severity.Error" Class="ma-4">@_error</MudAlert>
+}
+
+@if (_cargando)
+{
+    <MudContainer MaxWidth="MaxWidth.False" Class="pa-0">
+        <MudSkeleton SkeletonType="SkeletonType.Rectangle"
+                     Height="calc(100dvh - var(--total-top-offset) - var(--nav-bar-height))"
+                     Width="100%" Animation="Animation.Wave" />
+    </MudContainer>
+}
+else
+{
+    <div style="position:relative;">
+        <div id="map"></div>
+
+        @* Botón GPS — posicionado sobre el mapa *@
+        <div style="position:absolute; bottom:calc(16px + var(--nav-bar-height));
+                    right:16px; z-index:1000;">
+            <MudTooltip Text="Centrar en mi ubicación" Placement="Placement.Left">
+                <MudFab Color="Color.Primary"
+                        StartIcon="@(_buscandoGps
+                            ? Icons.Material.Filled.GpsNotFixed
+                            : Icons.Material.Filled.GpsFixed)"
+                        Size="Size.Medium"
+                        OnClick="CentrarEnUbicacion"
+                        Disabled="_buscandoGps"
+                        Style="box-shadow: 0 2px 8px rgba(0,0,0,.3);" />
+            </MudTooltip>
+        </div>
+    </div>
+}
+
+@* Diálogo de permiso de ubicación denegado *@
+<MudDialog @bind-Visible="_mostrarDialogoGps">
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
+            <MudIcon Icon="@Icons.Material.Filled.LocationOff" Color="Color.Warning" />
+            <MudText Typo="Typo.h6">Ubicación no disponible</MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        <MudText Class="mb-2">@_gpsError</MudText>
+        <MudText Typo="Typo.body2" Color="Color.Secondary">
+            Para usar esta función, habilitá el permiso de ubicación
+            en la configuración de la aplicación.
+        </MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="() => _mostrarDialogoGps = false"
+                   Variant="Variant.Text">
+            Volver
+        </MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   StartIcon="@Icons.Material.Filled.Settings"
+                   OnClick="IrAConfiguracion">
+            Ir a Configuración
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private DotNetObjectReference<Mapa>? _dotnetRef;
+    private List<PuntoDto> _puntos = new();
+    private bool _cargando = true;
+    private bool _mapaListo;
+    private string? _error;
+    private bool _buscandoGps;
+    private string? _gpsError;
+    private bool _mostrarDialogoGps;
+    private IUbicacionService? _ubicacionService;
+
+    [SupplyParameterFromQuery(Name = "puntoId")]
+    public int? NuevoPuntoId { get; set; }
+
+    [SupplyParameterFromQuery(Name = "lat")]
+    public string? NuevaLat { get; set; }
+
+    [SupplyParameterFromQuery(Name = "lng")]
+    public string? NuevaLng { get; set; }
+
+    protected override async Task OnInitializedAsync()
+    {
+        _ubicacionService = SP.GetService<IUbicacionService>();
+
+        try
+        {
+            _puntos = await Api.GetPuntosAsync();
+            _error = null;
+        }
+        catch (GeoFotoApiException ex)
+        {
+            _error = ex.Message;
+            Logger.LogError(ex, "Error cargando puntos");
+        }
+        finally
+        {
+            _cargando = false;
+        }
+    }
+
+    protected override async Task OnAfterRenderAsync(bool firstRender)
+    {
+        if (firstRender)
+        {
+            _dotnetRef = DotNetObjectReference.Create(this);
+            await JS.InvokeVoidAsync("leafletInterop.initMap", "map", -34.6037, -58.3816, 13);
+            _mapaListo = true;
+        }
+
+        if (_mapaListo && _puntos.Any())
+        {
+            await JS.InvokeVoidAsync("leafletInterop.addMarkers", _puntos, _dotnetRef);
+
+            // Si venimos de una subida: centrar en el punto recién creado
+            if (!string.IsNullOrEmpty(NuevaLat) && !string.IsNullOrEmpty(NuevaLng))
+            {
+                if (double.TryParse(NuevaLat, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var lat) &&
+                    double.TryParse(NuevaLng, System.Globalization.NumberStyles.Float,
+                        System.Globalization.CultureInfo.InvariantCulture, out var lng))
+                {
+                    await JS.InvokeVoidAsync("leafletInterop.centrarEnCoordenadas", lat, lng, 16);
+
+                    if (NuevoPuntoId.HasValue)
+                    {
+                        await OnMarkerClicked(NuevoPuntoId.Value);
+                    }
+                }
+                // Clear query params to prevent re-centering
+                NuevaLat = null;
+                NuevaLng = null;
+                NuevoPuntoId = null;
+            }
+        }
+    }
+
+    private async Task CentrarEnUbicacion()
+    {
+        _buscandoGps = true;
+        _gpsError = null;
+        StateHasChanged();
+
+        try
+        {
+            if (_ubicacionService is not null)
+            {
+                // Usar API nativa de MAUI (funciona con permisos Android)
+                var result = await _ubicacionService.ObtenerUbicacionAsync();
+
+                if (result.Ok)
+                {
+                    await JS.InvokeVoidAsync("leafletInterop.mostrarPosicionGps",
+                        result.Latitud, result.Longitud, result.Precision);
+                    Snackbar.Add($"Ubicación obtenida — precisión: {Math.Round(result.Precision)}m",
+                        Severity.Success);
+                }
+                else if (result.PermisoDenegado)
+                {
+                    _gpsError = result.Error;
+                    _mostrarDialogoGps = true;
+                }
+                else
+                {
+                    Snackbar.Add($"GPS: {result.Error}", Severity.Warning);
+                }
+            }
+            else
+            {
+                // Fallback a navigator.geolocation (Web)
+                await JS.InvokeVoidAsync("leafletInterop.centrarEnUbicacion", _dotnetRef);
+                return; // _buscandoGps se actualiza via JSInvokable callbacks
+            }
+        }
+        catch (Exception ex)
+        {
+            Logger.LogError(ex, "Error en GPS");
+            Snackbar.Add("No se pudo obtener la ubicación", Severity.Warning);
+        }
+
+        _buscandoGps = false;
+        StateHasChanged();
+    }
+
+    private async Task IrAConfiguracion()
+    {
+        _mostrarDialogoGps = false;
+        if (_ubicacionService is not null)
+        {
+            await _ubicacionService.AbrirConfiguracionApp();
+        }
+    }
+
+    [JSInvokable]
+    public Task OnGpsOk(double lat, double lng, double precision)
+    {
+        _buscandoGps = false;
+        Snackbar.Add($"Ubicación obtenida — precisión: {Math.Round(precision)}m", Severity.Success);
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public Task OnGpsError(string mensaje)
+    {
+        _buscandoGps = false;
+        _gpsError = mensaje;
+        _mostrarDialogoGps = true;
+        StateHasChanged();
+        return Task.CompletedTask;
+    }
+
+    [JSInvokable]
+    public async Task OnMarkerClicked(int puntoId)
+    {
+        var parameters = new DialogParameters<GeoFoto.Shared.Components.DetallePunto>
+        {
+            { x => x.PuntoId, puntoId }
+        };
+
+        var options = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Medium,
+            FullWidth = true,
+            CloseOnEscapeKey = true
+        };
+
+        var dialog = await DialogService.ShowAsync<GeoFoto.Shared.Components.DetallePunto>(
+            "Detalle del Punto", parameters, options);
+
+        var result = await dialog.Result;
+        if (result is not null && !result.Canceled)
+        {
+            _puntos = await Api.GetPuntosAsync();
+            if (_mapaListo)
+            {
+                await JS.InvokeVoidAsync("leafletInterop.addMarkers", _puntos, _dotnetRef);
+            }
+        }
+    }
+
+    public void Dispose()
+    {
+        _dotnetRef?.Dispose();
+    }
+}

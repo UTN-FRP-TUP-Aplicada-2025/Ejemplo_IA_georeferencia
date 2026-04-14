@@ -1,0 +1,146 @@
+@page "/sync"
+@attribute [StreamRendering]
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceProvider SP
+
+<MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4">
+    <MudText Typo="Typo.h5" GutterBottom="true">Estado de sincronización</MudText>
+
+    @if (_localDb is null)
+    {
+        <MudAlert Severity="Severity.Info">
+            La vista de sincronización está disponible solo en la app móvil.
+        </MudAlert>
+    }
+    else
+    {
+        <div style="display:grid; grid-template-columns:repeat(auto-fill,minmax(160px,1fr)); gap:16px;" class="mb-4">
+            <MudPaper Class="pa-4 text-center" Outlined="true">
+                <MudText Typo="Typo.h3" Color="Color.Warning">@_pendientes</MudText>
+                <MudText Typo="Typo.caption">Pendientes</MudText>
+            </MudPaper>
+            <MudPaper Class="pa-4 text-center" Outlined="true">
+                <MudText Typo="Typo.h3" Color="Color.Success">@_sincronizados</MudText>
+                <MudText Typo="Typo.caption">Sincronizados</MudText>
+            </MudPaper>
+            <MudPaper Class="pa-4 text-center" Outlined="true">
+                <MudText Typo="Typo.h3" Color="Color.Error">@_fallidos</MudText>
+                <MudText Typo="Typo.caption">Fallidos</MudText>
+            </MudPaper>
+            <MudPaper Class="pa-4 text-center" Outlined="true">
+                <MudIcon Icon="@(_conectado ? Icons.Material.Filled.Wifi : Icons.Material.Filled.WifiOff)"
+                         Color="@(_conectado ? Color.Success : Color.Error)" />
+                <MudText Typo="Typo.caption">@(_conectado ? "Conectado" : "Sin conexión")</MudText>
+            </MudPaper>
+        </div>
+
+        <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                   StartIcon="@Icons.Material.Filled.Sync"
+                   Disabled="@(!_conectado || _sincronizando)"
+                   OnClick="SincronizarAhora" Class="mb-4">
+            @(_sincronizando ? "Sincronizando..." : "Sincronizar ahora")
+        </MudButton>
+
+        @if (_sincronizando)
+        {
+            <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mb-4" />
+        }
+
+        <MudText Typo="Typo.h6" Class="mt-4 mb-2">Historial de operaciones</MudText>
+
+        @if (!_operaciones.Any())
+        {
+            <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
+                No hay operaciones registradas. Todo está sincronizado.
+            </MudAlert>
+        }
+        else
+        {
+            <MudTimeline TimelineAlign="TimelineAlign.Start" TimelinePosition="TimelinePosition.Start">
+                @foreach (var op in _operaciones.OrderByDescending(o => o.CreatedAt).Take(20))
+                {
+                    <MudTimelineItem Color="@ColorDeEstado(op.Status)"
+                                     Size="Size.Small"
+                                     Variant="Variant.Filled">
+                        <ItemContent>
+                            <MudStack Spacing="0">
+                                <MudText Typo="Typo.body2">
+                                    <strong>@op.OperationType</strong> @op.EntityType #@op.LocalId
+                                </MudText>
+                                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                                    @FormatFecha(op.CreatedAt)
+                                    · Intentos: @op.Attempts
+                                </MudText>
+                                @if (op.ErrorMessage is not null)
+                                {
+                                    <MudText Typo="Typo.caption" Color="Color.Error">
+                                        @op.ErrorMessage
+                                    </MudText>
+                                }
+                            </MudStack>
+                        </ItemContent>
+                    </MudTimelineItem>
+                }
+            </MudTimeline>
+
+            @if (_operaciones.Count > 20)
+            {
+                <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-2">
+                    Mostrando las últimas 20 de @_operaciones.Count operaciones.
+                </MudText>
+            }
+        }
+    }
+</MudContainer>
+
+@code {
+    private ILocalDbService? _localDb;
+    private IConnectivityService? _connectivity;
+    private ISyncService? _syncService;
+    private int _pendientes, _sincronizados, _fallidos;
+    private bool _conectado, _sincronizando;
+    private List<SyncQueueItem> _operaciones = new();
+
+    protected override async Task OnInitializedAsync()
+    {
+        _localDb = SP.GetService<ILocalDbService>();
+        _connectivity = SP.GetService<IConnectivityService>();
+        _syncService = SP.GetService<ISyncService>();
+        _conectado = _connectivity?.IsConnected ?? true;
+        await CargarDatos();
+    }
+
+    private async Task CargarDatos()
+    {
+        if (_localDb is null) return;
+        _operaciones = await _localDb.GetPendingOperationsAsync();
+        _pendientes = _operaciones.Count(o => o.Status == SyncQueueStatus.Pending);
+        _sincronizados = _operaciones.Count(o => o.Status == SyncQueueStatus.Done);
+        _fallidos = _operaciones.Count(o => o.Status == SyncQueueStatus.Failed);
+    }
+
+    private async Task SincronizarAhora()
+    {
+        if (_syncService is null) return;
+        _sincronizando = true;
+        try
+        {
+            await _syncService.SyncNowAsync();
+            await CargarDatos();
+        }
+        catch (Exception) { /* errors shown via SyncCompleted event */ }
+        finally { _sincronizando = false; }
+    }
+
+    private Color ColorDeEstado(string status) => status switch
+    {
+        SyncQueueStatus.Pending => Color.Warning,
+        SyncQueueStatus.Done => Color.Success,
+        SyncQueueStatus.Failed => Color.Error,
+        SyncQueueStatus.InProgress => Color.Info,
+        _ => Color.Default
+    };
+
+    private string FormatFecha(string iso) =>
+        DateTime.TryParse(iso, out var dt) ? dt.ToLocalTime().ToString("dd/MM HH:mm") : iso;
+}

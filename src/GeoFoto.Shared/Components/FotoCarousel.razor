@@ -1,0 +1,113 @@
+@using GeoFoto.Shared.Models
+@using GeoFoto.Shared.Services
+
+<div class="foto-carousel">
+    @if (!Fotos.Any())
+    {
+        <MudPaper Class="pa-4 text-center" Outlined="true">
+            <MudIcon Icon="@Icons.Material.Filled.PhotoLibrary"
+                     Color="Color.Secondary" Style="font-size:2rem;" />
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1">
+                Sin fotos
+            </MudText>
+        </MudPaper>
+    }
+    else
+    {
+        @* Imagen principal *@
+        <div style="position:relative; cursor:pointer;"
+             @onclick="AbrirGaleria">
+            <MudImage Src="@Api.GetFotoUrl(Fotos[_indice].Id)"
+                      Alt="@($"Foto {_indice+1} de {Fotos.Count}")"
+                      ObjectFit="ObjectFit.Cover"
+                      Class="foto-principal"
+                      Elevation="0" />
+
+            @* Overlay con número de fotos *@
+            <div style="position:absolute; bottom:8px; right:8px;
+                        background:rgba(0,0,0,.55); color:white;
+                        padding:3px 8px; border-radius:12px; font-size:12px;">
+                @Fotos.Count foto(s)
+            </div>
+
+            @* Indicador de foto actual *@
+            @if (Fotos.Count > 1)
+            {
+                <div style="position:absolute; bottom:8px; left:50%;
+                            transform:translateX(-50%);
+                            display:flex; gap:4px;">
+                    @for (int i = 0; i < Fotos.Count; i++)
+                    {
+                        var idx = i;
+                        <div style="width:@(idx==_indice ? 16 : 6)px; height:6px;
+                                    border-radius:3px; transition:width .2s;
+                                    background:@(idx==_indice ? "white" : "rgba(255,255,255,.5)");
+                                    cursor:pointer;"
+                             @onclick:stopPropagation="true"
+                             @onclick="() => _indice = idx">
+                        </div>
+                    }
+                </div>
+            }
+        </div>
+
+        @* Miniaturas si hay más de 1 foto *@
+        @if (Fotos.Count > 1)
+        {
+            <div class="foto-thumbnails">
+                @foreach (var (foto, i) in Fotos.Select((f,i) => (f,i)))
+                {
+                    var idx = i;
+                    <div class="@($"thumb {(idx==_indice ? "thumb-active" : "")}")"
+                         @onclick="() => _indice = idx">
+                        <MudImage Src="@Api.GetFotoUrl(foto.Id)"
+                                  Alt="@($"Foto {idx+1}")"
+                                  ObjectFit="ObjectFit.Cover"
+                                  Style="width:100%;height:100%;" />
+                    </div>
+                }
+            </div>
+        }
+
+        @* Fecha y metadatos de la foto actual *@
+        @if (Fotos[_indice].FechaTomada.HasValue)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1 px-1">
+                @Fotos[_indice].FechaTomada!.Value.ToString("dd/MM/yyyy HH:mm")
+                @if (Fotos[_indice].LatitudExif.HasValue)
+                {
+                    <span> · GPS: @Fotos[_indice].LatitudExif!.Value.ToString("F4")°,
+                           @Fotos[_indice].LongitudExif!.Value.ToString("F4")°</span>
+                }
+            </MudText>
+        }
+    }
+</div>
+
+@code {
+    [Parameter] public List<FotoDto> Fotos { get; set; } = new();
+    [Inject] private IGeoFotoApiClient Api { get; set; } = default!;
+    [Inject] private IDialogService Dialog { get; set; } = default!;
+
+    private int _indice = 0;
+
+    private async Task AbrirGaleria()
+    {
+        var params_ = new DialogParameters<GaleriaFotosDialog>
+        {
+            { x => x.Fotos, Fotos },
+            { x => x.IndiceInicial, _indice }
+        };
+        var opts = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseOnEscapeKey = true,
+            CloseButton = true
+        };
+        var dialog = await Dialog.ShowAsync<GaleriaFotosDialog>(
+            "Fotos del punto", params_, opts);
+        var result = await dialog.Result;
+        if (result?.Data is int nuevoIndice) _indice = nuevoIndice;
+    }
+}

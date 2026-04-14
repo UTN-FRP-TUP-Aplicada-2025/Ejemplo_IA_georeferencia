@@ -1,0 +1,94 @@
+@using GeoFoto.Shared.Models
+@using GeoFoto.Shared.Services
+@inject IGeoFotoApiClient Api
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            Foto @(_indice+1) de @Fotos.Count
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        <div style="position:relative; min-height:300px;">
+            <MudImage Src="@Api.GetFotoUrl(Fotos[_indice].Id)"
+                      Alt="@($"Foto {_indice+1}")"
+                      ObjectFit="ObjectFit.Contain"
+                      Style="width:100%; max-height:70vh;"
+                      Elevation="0" />
+
+            @* Flechas de navegación *@
+            @if (_indice > 0)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft"
+                               Style="position:absolute;left:8px;top:50%;transform:translateY(-50%);
+                                      background:rgba(0,0,0,.45);color:white;border-radius:50%;"
+                               OnClick="() => _indice--" />
+            }
+            @if (_indice < Fotos.Count - 1)
+            {
+                <MudIconButton Icon="@Icons.Material.Filled.ChevronRight"
+                               Style="position:absolute;right:8px;top:50%;transform:translateY(-50%);
+                                      background:rgba(0,0,0,.45);color:white;border-radius:50%;"
+                               OnClick="() => _indice++" />
+            }
+        </div>
+
+        @* Metadata de la foto *@
+        @{var foto = Fotos[_indice];}
+        <MudStack Row="true" Wrap="Wrap.Wrap" Class="mt-2 px-2" Spacing="2">
+            @if (foto.FechaTomada.HasValue)
+            {
+                <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Schedule">
+                    @foto.FechaTomada.Value.ToString("dd/MM/yyyy HH:mm")
+                </MudChip>
+            }
+            @if (foto.LatitudExif.HasValue)
+            {
+                <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.LocationOn"
+                         Color="Color.Primary">
+                    @foto.LatitudExif.Value.ToString("F5")°,
+                    @foto.LongitudExif!.Value.ToString("F5")°
+                </MudChip>
+            }
+            <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Photo">
+                @foto.NombreArchivo
+            </MudChip>
+        </MudStack>
+
+        @* Tira de miniaturas *@
+        @if (Fotos.Count > 1)
+        {
+            <div style="display:flex;gap:6px;overflow-x:auto;padding:12px 8px 4px;
+                        scrollbar-width:thin;">
+                @foreach (var (f, i) in Fotos.Select((f,i) => (f,i)))
+                {
+                    var idx = i;
+                    <div style="flex-shrink:0;width:64px;height:64px;border-radius:6px;
+                                overflow:hidden;cursor:pointer;
+                                border:2px solid @(idx==_indice ? "var(--mud-palette-primary)" : "transparent");
+                                transition:border-color .15s;"
+                         @onclick="() => _indice = idx">
+                        <MudImage Src="@Api.GetFotoUrl(f.Id)"
+                                  ObjectFit="ObjectFit.Cover"
+                                  Style="width:100%;height:100%;" />
+                    </div>
+                }
+            </div>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cerrar" Variant="Variant.Text">Cerrar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public List<FotoDto> Fotos { get; set; } = new();
+    [Parameter] public int IndiceInicial { get; set; } = 0;
+
+    private int _indice;
+
+    protected override void OnInitialized() => _indice = IndiceInicial;
+
+    private void Cerrar() => MudDialog.Close(DialogResult.Ok(_indice));
+}

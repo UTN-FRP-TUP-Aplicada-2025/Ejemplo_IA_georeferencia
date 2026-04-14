@@ -1,0 +1,113 @@
+@inherits LayoutComponentBase
+@using GeoFoto.Shared.Services
+@using Microsoft.Extensions.DependencyInjection
+@implements IDisposable
+
+<GeoFoto.Shared.Layouts.MainLayout>
+    @Body
+</GeoFoto.Shared.Layouts.MainLayout>
+
+<MudFab Color="Color.Secondary"
+        StartIcon="@Icons.Material.Filled.CameraAlt"
+        Class="mud-fab-fixed-bottom"
+        Style="position:fixed;right:24px;z-index:1000;"
+        OnClick="AbrirCamara" />
+
+@code {
+    [Inject] private ICamaraService Camara { get; set; } = default!;
+    [Inject] private IFotoUploadStrategy UploadStrategy { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+    [Inject] private IServiceProvider SP { get; set; } = default!;
+
+    private ISyncService? _syncService;
+
+    protected override void OnInitialized()
+    {
+        _syncService = SP.GetService<ISyncService>();
+        if (_syncService is not null)
+            _syncService.SyncCompleted += OnSyncCompleted;
+    }
+
+    private async Task AbrirCamara()
+    {
+        try
+        {
+            var stream = await Camara.TomarFotoAsync();
+            if (stream is null)
+            {
+                Snackbar.Add("Cámara no disponible o foto cancelada", Severity.Warning);
+                return;
+            }
+
+            // CRITICAL FIX: Copy to MemoryStream immediately before source stream is disposed
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            ms.Seek(0, SeekOrigin.Begin);
+            stream.Dispose();
+
+            var fileName = $"foto_{DateTime.Now:yyyyMMddHHmmss}.jpg";
+
+            // Wrap UI updates in InvokeAsync
+            await InvokeAsync(async () =>
+            {
+                Snackbar.Add("Procesando foto...", Severity.Info);
+                StateHasChanged();
+
+                var result = await UploadStrategy.SubirAsync(ms, fileName);
+
+                if (result is not null)
+                {
+                    Snackbar.Add($"Foto capturada — Punto #{result.PuntoId}", Severity.Success);
+                    if (result.Latitud.HasValue)
+                    {
+                        var lat = result.Latitud!.Value.ToString("F7",
+                            System.Globalization.CultureInfo.InvariantCulture);
+                        var lng = result.Longitud!.Value.ToString("F7",
+                            System.Globalization.CultureInfo.InvariantCulture);
+                        Nav.NavigateTo($"/?lat={lat}&lng={lng}&puntoId={result.PuntoId}");
+                    }
+                    else
+                    {
+                        Nav.NavigateTo("/");
+                    }
+                }
+                else
+                {
+                    Snackbar.Add("Error al procesar la foto", Severity.Error);
+                }
+            });
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+
+    private void OnSyncCompleted(object? sender, SyncCompletedEventArgs e)
+    {
+        InvokeAsync(() =>
+        {
+            if (e.Successful > 0 && e.Failed == 0)
+            {
+                Snackbar.Add(
+                    $"Sincronización completa — {e.Successful} operación(es) enviadas",
+                    Severity.Success,
+                    cfg => { cfg.VisibleStateDuration = 3000; cfg.ShowCloseIcon = false; });
+            }
+            else if (e.Failed > 0)
+            {
+                Snackbar.Add(
+                    $"Sync parcial: {e.Successful} OK, {e.Failed} fallidas",
+                    Severity.Warning,
+                    cfg => { cfg.VisibleStateDuration = 5000; });
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        if (_syncService is not null)
+            _syncService.SyncCompleted -= OnSyncCompleted;
+    }
+}

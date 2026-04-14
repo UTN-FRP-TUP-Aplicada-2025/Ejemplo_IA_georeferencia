@@ -1,0 +1,221 @@
+@using GeoFoto.Shared.Models
+@using GeoFoto.Shared.Services
+@using Microsoft.Extensions.Logging
+
+<MudDialog>
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudIcon Icon="@Icons.Material.Filled.Place" Class="mr-1" />
+            <MudText Typo="Typo.h6">
+                @(_nombre ?? $"Punto #{PuntoId}")
+            </MudText>
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" Class="d-block mx-auto my-4" />
+        }
+        else if (_punto is null)
+        {
+            <MudAlert Severity="Severity.Error">No se encontró el punto.</MudAlert>
+        }
+        else
+        {
+            @if (_punto.Fotos.Count > 0)
+            {
+                <FotoCarousel Fotos="_punto.Fotos" />
+            }
+
+            <MudStack Spacing="2" Class="mt-3">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @_punto.Latitud.ToString("F6")°, @_punto.Longitud.ToString("F6")°
+                    @if (_punto.FechaCreacion != default)
+                    {
+                        <text> — @_punto.FechaCreacion.ToString("dd/MM/yyyy HH:mm")</text>
+                    }
+                </MudText>
+
+                <MudTextField @bind-Value="_nombre"
+                              Label="Nombre del punto"
+                              Variant="Variant.Outlined"
+                              Clearable="true"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Label"
+                              Margin="Margin.Dense" />
+
+                <MudTextField @bind-Value="_descripcion"
+                              Label="Descripción"
+                              Variant="Variant.Outlined"
+                              Lines="3"
+                              Placeholder="Agregá notas sobre este punto..."
+                              Margin="Margin.Dense" />
+            </MudStack>
+
+            @* Sección de acciones: agregar fotos *@
+            <MudDivider Class="my-3" />
+
+            <MudText Typo="Typo.subtitle2" Class="mb-2">Agregar a este punto</MudText>
+
+            <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                           FilesChanged="OnAgregarFotos"
+                           Accept=".jpg,.jpeg,.png,.webp"
+                           MaximumFileCount="10"
+                           Disabled="_agregando">
+                <ChildContent>
+                    <MudButton HtmlTag="label"
+                               Variant="Variant.Outlined"
+                               Color="Color.Primary"
+                               StartIcon="@Icons.Material.Filled.AddPhotoAlternate"
+                               Disabled="_agregando"
+                               Size="Size.Small">
+                        @(_agregando ? "Agregando..." : "Agregar fotos")
+                    </MudButton>
+                </ChildContent>
+            </MudFileUpload>
+
+            @if (_agregando)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-2" />
+            }
+
+            @if (_fotosAgregadas > 0)
+            {
+                <MudAlert Severity="Severity.Success" Dense="true" Class="mt-2">
+                    @_fotosAgregadas foto(s) agregada(s) al punto
+                </MudAlert>
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudIconButton Icon="@Icons.Material.Filled.MyLocation"
+                       OnClick="CentrarEnMapa"
+                       title="Centrar en el mapa"
+                       Disabled="_punto is null" />
+        <MudSpacer />
+        <MudButton OnClick="Cancel">Cerrar</MudButton>
+        <MudButton Color="Color.Error"
+                   Variant="Variant.Text"
+                   OnClick="DeletePunto"
+                   Disabled="_loading">
+            Eliminar
+        </MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="SavePunto"
+                   Disabled="_loading || _guardando"
+                   StartIcon="@Icons.Material.Filled.Save">
+            @(_guardando ? "Guardando..." : "Guardar")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int PuntoId { get; set; }
+    [Inject] private IGeoFotoApiClient Api { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
+    [Inject] private ILogger<DetallePunto> Logger { get; set; } = default!;
+
+    private PuntoDetalleDto? _punto;
+    private string? _nombre;
+    private string? _descripcion;
+    private bool _loading = true;
+    private bool _guardando;
+    private bool _agregando;
+    private int _fotosAgregadas;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _punto = await Api.GetPuntoAsync(PuntoId);
+        if (_punto is not null)
+        {
+            _nombre = _punto.Nombre;
+            _descripcion = _punto.Descripcion;
+        }
+        _loading = false;
+    }
+
+    private async Task CentrarEnMapa()
+    {
+        if (_punto is not null)
+        {
+            await JS.InvokeVoidAsync("leafletInterop.centerOn",
+                (double)_punto.Latitud, (double)_punto.Longitud);
+        }
+    }
+
+    private async Task SavePunto()
+    {
+        _guardando = true;
+        var req = new ActualizarPuntoRequest(_nombre, _descripcion);
+        var ok = await Api.UpdatePuntoAsync(PuntoId, req);
+        if (ok)
+        {
+            Snackbar.Add("Punto actualizado", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al actualizar", Severity.Error);
+        }
+        _guardando = false;
+    }
+
+    private async Task DeletePunto()
+    {
+        var ok = await Api.DeletePuntoAsync(PuntoId);
+        if (ok)
+        {
+            Snackbar.Add("Punto eliminado", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al eliminar", Severity.Error);
+        }
+    }
+
+    private async Task OnAgregarFotos(IReadOnlyList<IBrowserFile> files)
+    {
+        if (_punto is null || !files.Any()) return;
+        _agregando = true;
+        _fotosAgregadas = 0;
+        StateHasChanged();
+
+        var buffers = new List<(string nombre, string tipo, MemoryStream ms)>();
+        foreach (var f in files)
+        {
+            var ms = new MemoryStream();
+            await using var s = f.OpenReadStream(maxAllowedSize: 52_428_800);
+            await s.CopyToAsync(ms);
+            ms.Seek(0, SeekOrigin.Begin);
+            buffers.Add((f.Name, f.ContentType ?? "image/jpeg", ms));
+        }
+
+        await InvokeAsync(async () =>
+        {
+            foreach (var (nombre, tipo, ms) in buffers)
+            {
+                try
+                {
+                    await Api.AgregarFotoAPuntoAsync(_punto.Id, ms, nombre, tipo);
+                    _fotosAgregadas++;
+                }
+                catch (Exception ex)
+                {
+                    Logger.LogError(ex, "Error agregando foto a punto {Id}", _punto.Id);
+                    Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+                }
+            }
+            _agregando = false;
+
+            // Recargar el detalle del punto para mostrar las nuevas fotos
+            _punto = await Api.GetPuntoAsync(_punto.Id);
+            StateHasChanged();
+        });
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}
