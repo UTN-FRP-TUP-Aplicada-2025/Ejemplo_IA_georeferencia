@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no, viewport-fit=cover" />
+    <title>GeoFoto</title>
+    <base href="/" />
+    <link href="https://fonts.googleapis.com/css?family=Roboto:300,400,500,700&display=swap" rel="stylesheet" />
+    <link href="_content/MudBlazor/MudBlazor.min.css" rel="stylesheet" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.css" />
+    <link rel="stylesheet" href="https://unpkg.com/leaflet.markercluster@1.5.3/dist/MarkerCluster.Default.css" />
+    <link href="_content/GeoFoto.Shared/css/geofoto.css" rel="stylesheet" />
+</head>
+
+<body>
+
+    <div id="app">Cargando GeoFoto...</div>
+
+    <script src="_content/MudBlazor/MudBlazor.min.js"></script>
+    <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+    <script src="https://unpkg.com/leaflet.markercluster@1.5.3/dist/leaflet.markercluster.js"></script>
+    <script src="_content/GeoFoto.Shared/js/leaflet-interop.js"></script>
+    <script src="_framework/blazor.webview.js" autostart="false"></script>
+    <script>
+        function startBlazor() {
+            if (window.external && typeof window.external.receiveMessage === 'function') {
+                if (!window.__blazorStarted) {
+                    window.__blazorStarted = true;
+                    Blazor.start().catch(function() {});
+                }
+            } else {
+                setTimeout(startBlazor, 50);
+            }
+        }
+        startBlazor();
+    </script>
+
+</body>
+
+</html>

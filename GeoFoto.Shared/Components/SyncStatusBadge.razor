@@ -1,0 +1,65 @@
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceProvider SP
+@implements IDisposable
+
+@if (_pendientes > 0)
+{
+    <MudBadge Content="@_pendientes" Color="Color.Warning" Overlap="true">
+        <MudTooltip Text="@($"{_pendientes} operaciones pendientes de sincronizar")">
+            <MudIconButton Icon="@Icons.Material.Filled.CloudOff"
+                           Color="Color.Warning" Href="/sync" />
+        </MudTooltip>
+    </MudBadge>
+}
+else if (_connectivity?.IsConnected == true)
+{
+    <MudIconButton Icon="@Icons.Material.Filled.CloudDone" Color="Color.Success" />
+}
+else if (_connectivity is not null)
+{
+    <MudIconButton Icon="@Icons.Material.Filled.CloudOff" Color="Color.Default" />
+}
+
+@code {
+    private IConnectivityService? _connectivity;
+    private ILocalDbService? _localDb;
+    private int _pendientes;
+    private Timer? _timer;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _connectivity = SP.GetService<IConnectivityService>();
+        _localDb = SP.GetService<ILocalDbService>();
+
+        await ActualizarContador();
+
+        _timer = new Timer(async _ =>
+        {
+            await ActualizarContador();
+            await InvokeAsync(StateHasChanged);
+        }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
+
+        if (_connectivity is not null)
+            _connectivity.ConnectivityChanged += OnConnectivityChanged;
+    }
+
+    private async Task ActualizarContador()
+    {
+        if (_localDb is null) return;
+        try
+        {
+            _pendientes = await _localDb.GetPendingCountAsync();
+        }
+        catch { /* DB not initialized yet */ }
+    }
+
+    private void OnConnectivityChanged(object? sender, bool connected)
+        => InvokeAsync(StateHasChanged);
+
+    public void Dispose()
+    {
+        _timer?.Dispose();
+        if (_connectivity is not null)
+            _connectivity.ConnectivityChanged -= OnConnectivityChanged;
+    }
+}

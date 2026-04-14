@@ -1,0 +1,123 @@
+@using GeoFoto.Shared.Models
+@using GeoFoto.Shared.Services
+
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">
+            <MudIcon Icon="@Icons.Material.Filled.Place" Class="mr-2" />
+            Punto #@PuntoId
+        </MudText>
+    </TitleContent>
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" Class="d-block mx-auto my-4" />
+        }
+        else if (_punto is null)
+        {
+            <MudAlert Severity="Severity.Error">No se encontró el punto.</MudAlert>
+        }
+        else
+        {
+            <MudGrid>
+                <MudItem xs="12">
+                    <FotoCarousel Fotos="_punto.Fotos" />
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudTextField @bind-Value="_nombre"
+                                  Label="Nombre"
+                                  Variant="Variant.Outlined" />
+                </MudItem>
+
+                <MudItem xs="12" sm="6">
+                    <MudText Typo="Typo.body2" Class="mt-3">
+                        <strong>Coordenadas:</strong> @_punto.Latitud, @_punto.Longitud
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        <strong>Fotos:</strong> @_punto.Fotos.Count
+                    </MudText>
+                    <MudText Typo="Typo.body2">
+                        <strong>Creado:</strong> @_punto.FechaCreacion.ToString("dd/MM/yyyy HH:mm")
+                    </MudText>
+                </MudItem>
+
+                <MudItem xs="12">
+                    <MudTextField @bind-Value="_descripcion"
+                                  Label="Descripción"
+                                  Variant="Variant.Outlined"
+                                  Lines="3" />
+                </MudItem>
+            </MudGrid>
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel">Cerrar</MudButton>
+        <MudButton Color="Color.Error"
+                   Variant="Variant.Text"
+                   OnClick="DeletePunto"
+                   Disabled="_loading">
+            Eliminar
+        </MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="SavePunto"
+                   Disabled="_loading">
+            Guardar
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int PuntoId { get; set; }
+    [Inject] private IGeoFotoApiClient Api { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+
+    private PuntoDetalleDto? _punto;
+    private string? _nombre;
+    private string? _descripcion;
+    private bool _loading = true;
+
+    protected override async Task OnInitializedAsync()
+    {
+        _punto = await Api.GetPuntoAsync(PuntoId);
+        if (_punto is not null)
+        {
+            _nombre = _punto.Nombre;
+            _descripcion = _punto.Descripcion;
+        }
+        _loading = false;
+    }
+
+    private async Task SavePunto()
+    {
+        var req = new ActualizarPuntoRequest(_nombre, _descripcion);
+        var ok = await Api.UpdatePuntoAsync(PuntoId, req);
+        if (ok)
+        {
+            Snackbar.Add("Punto actualizado", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al actualizar", Severity.Error);
+        }
+    }
+
+    private async Task DeletePunto()
+    {
+        var ok = await Api.DeletePuntoAsync(PuntoId);
+        if (ok)
+        {
+            Snackbar.Add("Punto eliminado", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        else
+        {
+            Snackbar.Add("Error al eliminar", Severity.Error);
+        }
+    }
+
+    private void Cancel() => MudDialog.Cancel();
+}

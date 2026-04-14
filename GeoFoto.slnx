@@ -1,0 +1,7 @@
+<Solution>
+  <Project Path="GeoFoto.Api/GeoFoto.Api.csproj" />
+  <Project Path="GeoFoto.Mobile/GeoFoto.Mobile.csproj" />
+  <Project Path="GeoFoto.Shared/GeoFoto.Shared.csproj" />
+  <Project Path="GeoFoto.Tests/GeoFoto.Tests.csproj" />
+  <Project Path="GeoFoto.Web/GeoFoto.Web.csproj" />
+</Solution>

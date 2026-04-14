@@ -1,0 +1,106 @@
+@page "/subir"
+@using GeoFoto.Shared.Services
+@inject IFotoUploadStrategy UploadStrategy
+@inject ISnackbar Snackbar
+
+<PageTitle>Subir Fotos - GeoFoto</PageTitle>
+
+<MudContainer MaxWidth="MaxWidth.Small" Class="mt-4">
+    <MudText Typo="Typo.h5" Class="mb-4">Subir Fotos Georeferenciadas</MudText>
+
+    <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                   Accept=".jpg,.jpeg,.png"
+                   MaximumFileCount="20"
+                   FilesChanged="OnFilesSelected"
+                   Class="upload-zone">
+        <ChildContent>
+            <MudButton HtmlTag="label"
+                       Variant="Variant.Filled"
+                       Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.CloudUpload">
+                Seleccionar fotos
+            </MudButton>
+        </ChildContent>
+    </MudFileUpload>
+
+    @if (_uploading)
+    {
+        <MudProgressLinear Color="Color.Primary" Value="_progress" Class="mt-4" />
+        <MudText Typo="Typo.caption">@_statusMsg</MudText>
+    }
+
+    @if (_results.Count > 0)
+    {
+        <MudText Typo="Typo.h6" Class="mt-4">Resultados</MudText>
+        <MudSimpleTable Hover="true" Dense="true">
+            <thead>
+                <tr>
+                    <th>Archivo</th>
+                    <th>Geo</th>
+                    <th>Punto</th>
+                </tr>
+            </thead>
+            <tbody>
+                @foreach (var r in _results)
+                {
+                    <tr>
+                        <td>@r.NombreArchivo</td>
+                        <td>
+                            @if (r.TeniaGeo)
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.CheckCircle" Color="Color.Success" Size="Size.Small" />
+                            }
+                            else
+                            {
+                                <MudIcon Icon="@Icons.Material.Filled.Cancel" Color="Color.Error" Size="Size.Small" />
+                            }
+                        </td>
+                        <td>#@r.PuntoId</td>
+                    </tr>
+                }
+            </tbody>
+        </MudSimpleTable>
+    }
+</MudContainer>
+
+@code {
+    private bool _uploading;
+    private double _progress;
+    private string _statusMsg = "";
+    private readonly List<GeoFoto.Shared.Models.UploadResultDto> _results = new();
+
+    private async Task OnFilesSelected(IReadOnlyList<IBrowserFile> files)
+    {
+        if (files.Count == 0) return;
+
+        _uploading = true;
+        _results.Clear();
+        _progress = 0;
+        var total = files.Count;
+
+        for (int i = 0; i < total; i++)
+        {
+            var file = files[i];
+            _statusMsg = $"Subiendo {file.Name} ({i + 1}/{total})...";
+            _progress = (double)i / total * 100;
+            StateHasChanged();
+
+            try
+            {
+                var result = await UploadStrategy.SubirAsync(file);
+                if (result is not null)
+                    _results.Add(result);
+            }
+            catch (Exception ex)
+            {
+                Snackbar.Add($"Error subiendo {file.Name}: {ex.Message}", Severity.Error);
+            }
+        }
+
+        _progress = 100;
+        _uploading = false;
+        _statusMsg = "";
+        Snackbar.Add($"{_results.Count} foto(s) subida(s)", Severity.Success);
+        StateHasChanged();
+    }
+}

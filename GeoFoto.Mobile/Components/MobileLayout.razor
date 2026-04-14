@@ -1,0 +1,44 @@
+@inherits LayoutComponentBase
+@using GeoFoto.Shared.Services
+
+<GeoFoto.Shared.Layouts.MainLayout>
+    @Body
+</GeoFoto.Shared.Layouts.MainLayout>
+
+<MudFab Color="Color.Secondary"
+        StartIcon="@Icons.Material.Filled.CameraAlt"
+        Style="position:fixed;bottom:24px;right:24px;z-index:1000;"
+        OnClick="AbrirCamara" />
+
+@code {
+    [Inject] private ICamaraService Camara { get; set; } = default!;
+    [Inject] private IFotoUploadStrategy UploadStrategy { get; set; } = default!;
+    [Inject] private ISnackbar Snackbar { get; set; } = default!;
+    [Inject] private NavigationManager Nav { get; set; } = default!;
+
+    private async Task AbrirCamara()
+    {
+        try
+        {
+            var stream = await Camara.TomarFotoAsync();
+            if (stream is null)
+            {
+                Snackbar.Add("Cámara no disponible o foto cancelada", Severity.Warning);
+                return;
+            }
+
+            var fileName = $"foto_{DateTime.Now:yyyyMMddHHmmss}.jpg";
+            var result = await UploadStrategy.SubirAsync(stream, fileName);
+
+            if (result is not null)
+            {
+                Snackbar.Add($"Foto capturada — Punto #{result.PuntoId}", Severity.Success);
+                Nav.NavigateTo("/");
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error: {ex.Message}", Severity.Error);
+        }
+    }
+}
