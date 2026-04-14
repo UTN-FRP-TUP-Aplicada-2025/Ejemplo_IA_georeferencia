@@ -2,40 +2,63 @@
 @inject IServiceProvider SP
 @implements IDisposable
 
-@if (_pendientes > 0)
-{
-    <MudBadge Content="@_pendientes" Color="Color.Warning" Overlap="true">
-        <MudTooltip Text="@($"{_pendientes} operaciones pendientes de sincronizar")">
-            <MudIconButton Icon="@Icons.Material.Filled.CloudOff"
-                           Color="Color.Warning" Href="/sync" />
-        </MudTooltip>
-    </MudBadge>
+@{
+    var (icono, color, tooltip) = _estado switch
+    {
+        "sinred_pendientes" => (Icons.Material.Filled.CloudOff, Color.Error,
+            $"Sin conexión — {_pendientes} operación(es) esperando sync"),
+        "conred_pendientes" => (Icons.Material.Filled.CloudSync, Color.Warning,
+            $"{_pendientes} operación(es) pendientes de sincronizar"),
+        "sincronizando"     => (Icons.Material.Filled.Sync, Color.Info,
+            "Sincronizando con el servidor..."),
+        "sinred_ok"         => (Icons.Material.Filled.CloudOff, Color.Default,
+            "Sin conexión — todo sincronizado"),
+        _                   => (Icons.Material.Filled.CloudDone, Color.Success,
+            "Todo sincronizado correctamente"),
+    };
 }
-else if (_connectivity?.IsConnected == true)
-{
-    <MudIconButton Icon="@Icons.Material.Filled.CloudDone" Color="Color.Success" />
-}
-else if (_connectivity is not null)
-{
-    <MudIconButton Icon="@Icons.Material.Filled.CloudOff" Color="Color.Default" />
-}
+
+<MudTooltip Text="@tooltip" Placement="Placement.Bottom">
+    @if (_pendientes > 0 || _estado == "sincronizando")
+    {
+        <MudBadge Content="@(_estado == "sincronizando" ? "..." : _pendientes.ToString())"
+                  Color="@color" Overlap="true" Dot="@(_estado == "sincronizando")">
+            <MudIconButton Icon="@icono" Color="@color" Href="/sync"
+                           Size="Size.Medium" />
+        </MudBadge>
+    }
+    else
+    {
+        <MudIconButton Icon="@icono" Color="@color" Href="/sync" Size="Size.Medium" />
+    }
+</MudTooltip>
 
 @code {
     private IConnectivityService? _connectivity;
     private ILocalDbService? _localDb;
+    private ISyncService? _syncService;
     private int _pendientes;
+    private bool _conectado = true;
+    private bool _sincronizando;
+    private string _estado = "ok";
     private Timer? _timer;
 
     protected override async Task OnInitializedAsync()
     {
         _connectivity = SP.GetService<IConnectivityService>();
         _localDb = SP.GetService<ILocalDbService>();
+        _syncService = SP.GetService<ISyncService>();
+
+        _conectado = _connectivity?.IsConnected ?? true;
 
         await ActualizarContador();
+        RecalcularEstado();
 
         _timer = new Timer(async _ =>
         {
             await ActualizarContador();
+            _sincronizando = _syncService?.IsSyncing ?? false;
+            RecalcularEstado();
             await InvokeAsync(StateHasChanged);
         }, null, TimeSpan.FromSeconds(5), TimeSpan.FromSeconds(5));
 
@@ -53,8 +76,24 @@ else if (_connectivity is not null)
         catch { /* DB not initialized yet */ }
     }
 
+    private void RecalcularEstado()
+    {
+        _estado = (_conectado, _pendientes, _sincronizando) switch
+        {
+            (_, _, true)        => "sincronizando",
+            (false, > 0, _)     => "sinred_pendientes",
+            (false, 0, _)       => "sinred_ok",
+            (true, > 0, _)      => "conred_pendientes",
+            _                   => "ok"
+        };
+    }
+
     private void OnConnectivityChanged(object? sender, bool connected)
-        => InvokeAsync(StateHasChanged);
+    {
+        _conectado = connected;
+        RecalcularEstado();
+        InvokeAsync(StateHasChanged);
+    }
 
     public void Dispose()
     {

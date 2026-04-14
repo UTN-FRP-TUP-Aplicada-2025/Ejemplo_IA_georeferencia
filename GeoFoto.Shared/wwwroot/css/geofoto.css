@@ -1,7 +1,11 @@
 #map {
-    height: calc(100vh - 64px - 32px);
+    height: calc(100vh - 48px);
     width: 100%;
     z-index: 0;
+}
+
+@media (max-width: 960px) {
+    #map { height: calc(100vh - 48px); }
 }
 
 .carousel-img {
@@ -12,14 +16,36 @@
     margin: 0 auto;
 }
 
+/* Upload zone */
 .upload-zone {
-    border: 2px dashed #90caf9;
-    border-radius: 8px;
-    padding: 2rem;
-    text-align: center;
-    transition: border-color 0.2s;
+    border: 2px dashed var(--mud-palette-primary, #1976d2);
+    border-radius: 12px;
+    transition: border-color .2s, background .2s;
+    cursor: pointer;
 }
 
 .upload-zone:hover {
-    border-color: #1976d2;
+    background: var(--mud-palette-primary-lighten, rgba(25,118,210,0.04));
 }
+
+.upload-zone.uploading {
+    border-style: solid;
+    border-color: var(--mud-palette-primary, #1976d2);
+    cursor: default;
+}
+
+.border-warning {
+    border-left: 3px solid var(--mud-palette-warning, #ff9800);
+}
+
+/* Cluster personalizado */
+.marker-cluster { background: transparent !important; }
+.cluster-small, .cluster-medium, .cluster-large {
+    display: flex; align-items: center; justify-content: center;
+    border-radius: 50%; color: white; font-weight: bold;
+    border: 2px solid rgba(255,255,255,0.6);
+    box-shadow: 0 2px 8px rgba(0,0,0,.3);
+}
+.cluster-small  { background: #43A047; width: 34px; height: 34px; font-size: 13px; }
+.cluster-medium { background: #FB8C00; width: 42px; height: 42px; font-size: 15px; }
+.cluster-large  { background: #E53935; width: 50px; height: 50px; font-size: 17px; }

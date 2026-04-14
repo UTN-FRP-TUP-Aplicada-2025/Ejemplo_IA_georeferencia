@@ -3,10 +3,12 @@
 
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6">
-            <MudIcon Icon="@Icons.Material.Filled.Place" Class="mr-2" />
-            Punto #@PuntoId
-        </MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudIcon Icon="@Icons.Material.Filled.Place" Class="mr-1" />
+            <MudText Typo="Typo.h6">
+                @(_nombre ?? $"Punto #{PuntoId}")
+            </MudText>
+        </MudStack>
     </TitleContent>
     <DialogContent>
         @if (_loading)
@@ -19,39 +21,43 @@
         }
         else
         {
-            <MudGrid>
-                <MudItem xs="12">
-                    <FotoCarousel Fotos="_punto.Fotos" />
-                </MudItem>
+            @if (_punto.Fotos.Count > 0)
+            {
+                <FotoCarousel Fotos="_punto.Fotos" />
+            }
 
-                <MudItem xs="12" sm="6">
-                    <MudTextField @bind-Value="_nombre"
-                                  Label="Nombre"
-                                  Variant="Variant.Outlined" />
-                </MudItem>
+            <MudStack Spacing="2" Class="mt-3">
+                <MudText Typo="Typo.caption" Color="Color.Secondary">
+                    @_punto.Latitud.ToString("F6")°, @_punto.Longitud.ToString("F6")°
+                    @if (_punto.FechaCreacion != default)
+                    {
+                        <text> — @_punto.FechaCreacion.ToString("dd/MM/yyyy HH:mm")</text>
+                    }
+                </MudText>
 
-                <MudItem xs="12" sm="6">
-                    <MudText Typo="Typo.body2" Class="mt-3">
-                        <strong>Coordenadas:</strong> @_punto.Latitud, @_punto.Longitud
-                    </MudText>
-                    <MudText Typo="Typo.body2">
-                        <strong>Fotos:</strong> @_punto.Fotos.Count
-                    </MudText>
-                    <MudText Typo="Typo.body2">
-                        <strong>Creado:</strong> @_punto.FechaCreacion.ToString("dd/MM/yyyy HH:mm")
-                    </MudText>
-                </MudItem>
+                <MudTextField @bind-Value="_nombre"
+                              Label="Nombre del punto"
+                              Variant="Variant.Outlined"
+                              Clearable="true"
+                              Adornment="Adornment.Start"
+                              AdornmentIcon="@Icons.Material.Filled.Label"
+                              Margin="Margin.Dense" />
 
-                <MudItem xs="12">
-                    <MudTextField @bind-Value="_descripcion"
-                                  Label="Descripción"
-                                  Variant="Variant.Outlined"
-                                  Lines="3" />
-                </MudItem>
-            </MudGrid>
+                <MudTextField @bind-Value="_descripcion"
+                              Label="Descripción"
+                              Variant="Variant.Outlined"
+                              Lines="3"
+                              Placeholder="Agregá notas sobre este punto..."
+                              Margin="Margin.Dense" />
+            </MudStack>
         }
     </DialogContent>
     <DialogActions>
+        <MudIconButton Icon="@Icons.Material.Filled.MyLocation"
+                       OnClick="CentrarEnMapa"
+                       title="Centrar en el mapa"
+                       Disabled="_punto is null" />
+        <MudSpacer />
         <MudButton OnClick="Cancel">Cerrar</MudButton>
         <MudButton Color="Color.Error"
                    Variant="Variant.Text"
@@ -62,8 +68,9 @@
         <MudButton Color="Color.Primary"
                    Variant="Variant.Filled"
                    OnClick="SavePunto"
-                   Disabled="_loading">
-            Guardar
+                   Disabled="_loading || _guardando"
+                   StartIcon="@Icons.Material.Filled.Save">
+            @(_guardando ? "Guardando..." : "Guardar")
         </MudButton>
     </DialogActions>
 </MudDialog>
@@ -73,11 +80,13 @@
     [Parameter] public int PuntoId { get; set; }
     [Inject] private IGeoFotoApiClient Api { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
+    [Inject] private IJSRuntime JS { get; set; } = default!;
 
     private PuntoDetalleDto? _punto;
     private string? _nombre;
     private string? _descripcion;
     private bool _loading = true;
+    private bool _guardando;
 
     protected override async Task OnInitializedAsync()
     {
@@ -90,8 +99,18 @@
         _loading = false;
     }
 
+    private async Task CentrarEnMapa()
+    {
+        if (_punto is not null)
+        {
+            await JS.InvokeVoidAsync("leafletInterop.centerOn",
+                (double)_punto.Latitud, (double)_punto.Longitud);
+        }
+    }
+
     private async Task SavePunto()
     {
+        _guardando = true;
         var req = new ActualizarPuntoRequest(_nombre, _descripcion);
         var ok = await Api.UpdatePuntoAsync(PuntoId, req);
         if (ok)
@@ -103,6 +122,7 @@
         {
             Snackbar.Add("Error al actualizar", Severity.Error);
         }
+        _guardando = false;
     }
 
     private async Task DeletePunto()
