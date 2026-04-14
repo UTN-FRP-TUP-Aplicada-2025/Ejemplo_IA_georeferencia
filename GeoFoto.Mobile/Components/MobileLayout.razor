@@ -1,5 +1,7 @@
 @inherits LayoutComponentBase
 @using GeoFoto.Shared.Services
+@using Microsoft.Extensions.DependencyInjection
+@implements IDisposable
 
 <GeoFoto.Shared.Layouts.MainLayout>
     @Body
@@ -15,6 +17,16 @@
     [Inject] private IFotoUploadStrategy UploadStrategy { get; set; } = default!;
     [Inject] private ISnackbar Snackbar { get; set; } = default!;
     [Inject] private NavigationManager Nav { get; set; } = default!;
+    [Inject] private IServiceProvider SP { get; set; } = default!;
+
+    private ISyncService? _syncService;
+
+    protected override void OnInitialized()
+    {
+        _syncService = SP.GetService<ISyncService>();
+        if (_syncService is not null)
+            _syncService.SyncCompleted += OnSyncCompleted;
+    }
 
     private async Task AbrirCamara()
     {
@@ -27,18 +39,63 @@
                 return;
             }
 
-            var fileName = $"foto_{DateTime.Now:yyyyMMddHHmmss}.jpg";
-            var result = await UploadStrategy.SubirAsync(stream, fileName);
+            // CRITICAL FIX: Copy to MemoryStream immediately before source stream is disposed
+            using var ms = new MemoryStream();
+            await stream.CopyToAsync(ms);
+            ms.Seek(0, SeekOrigin.Begin);
+            stream.Dispose();
 
-            if (result is not null)
+            var fileName = $"foto_{DateTime.Now:yyyyMMddHHmmss}.jpg";
+
+            // Wrap UI updates in InvokeAsync
+            await InvokeAsync(async () =>
             {
-                Snackbar.Add($"Foto capturada — Punto #{result.PuntoId}", Severity.Success);
-                Nav.NavigateTo("/");
-            }
+                Snackbar.Add("Procesando foto...", Severity.Info);
+                StateHasChanged();
+
+                var result = await UploadStrategy.SubirAsync(ms, fileName);
+
+                if (result is not null)
+                {
+                    Snackbar.Add($"Foto capturada — Punto #{result.PuntoId}", Severity.Success);
+                    Nav.NavigateTo("/");
+                }
+                else
+                {
+                    Snackbar.Add("Error al procesar la foto", Severity.Error);
+                }
+            });
         }
         catch (Exception ex)
         {
             Snackbar.Add($"Error: {ex.Message}", Severity.Error);
         }
+    }
+
+    private void OnSyncCompleted(object? sender, SyncCompletedEventArgs e)
+    {
+        InvokeAsync(() =>
+        {
+            if (e.Successful > 0 && e.Failed == 0)
+            {
+                Snackbar.Add(
+                    $"Sincronización completa — {e.Successful} operación(es) enviadas",
+                    Severity.Success,
+                    cfg => { cfg.VisibleStateDuration = 3000; cfg.ShowCloseIcon = false; });
+            }
+            else if (e.Failed > 0)
+            {
+                Snackbar.Add(
+                    $"Sync parcial: {e.Successful} OK, {e.Failed} fallidas",
+                    Severity.Warning,
+                    cfg => { cfg.VisibleStateDuration = 5000; });
+            }
+        });
+    }
+
+    public void Dispose()
+    {
+        if (_syncService is not null)
+            _syncService.SyncCompleted -= OnSyncCompleted;
     }
 }

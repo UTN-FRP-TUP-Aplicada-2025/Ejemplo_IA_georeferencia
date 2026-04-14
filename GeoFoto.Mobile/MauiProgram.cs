@@ -23,7 +23,7 @@ public static class MauiProgram
 		builder.Services.AddHttpClient<IGeoFotoApiClient, GeoFotoApiClient>(c =>
 		{
 			c.BaseAddress = new Uri("http://localhost:5000/");
-			c.Timeout = TimeSpan.FromSeconds(30);
+			c.Timeout = TimeSpan.FromSeconds(60);
 		});
 
 		builder.Services.AddScoped<ICamaraService, CamaraService>();
