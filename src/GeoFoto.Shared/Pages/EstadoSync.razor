@@ -34,12 +34,15 @@
             </MudPaper>
         </div>
 
-        <MudButton Variant="Variant.Filled" Color="Color.Primary"
-                   StartIcon="@Icons.Material.Filled.Sync"
-                   Disabled="@(!_conectado || _sincronizando)"
-                   OnClick="SincronizarAhora" Class="mb-4">
-            @(_sincronizando ? "Sincronizando..." : "Sincronizar ahora")
-        </MudButton>
+        <MudTooltip Text="@(!_conectado ? "Necesitás conexión para sincronizar" : "")"
+                    Disabled="_conectado">
+            <MudButton Variant="Variant.Filled" Color="Color.Primary"
+                       StartIcon="@Icons.Material.Filled.Sync"
+                       Disabled="@(!_conectado || _sincronizando)"
+                       OnClick="SincronizarAhora" Class="mb-4">
+                @(_sincronizando ? "Sincronizando..." : "Sincronizar ahora")
+            </MudButton>
+        </MudTooltip>
 
         @if (_sincronizando)
         {
@@ -51,7 +54,7 @@
         @if (!_operaciones.Any())
         {
             <MudAlert Severity="Severity.Info" Variant="Variant.Outlined">
-                No hay operaciones registradas. Todo está sincronizado.
+                No hay operaciones registradas
             </MudAlert>
         }
         else

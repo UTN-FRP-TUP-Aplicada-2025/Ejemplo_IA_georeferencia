@@ -4,9 +4,14 @@
 
 <MudDialog>
     <TitleContent>
-        <MudText Typo="Typo.h6">
-            Foto @(_indice+1) de @Fotos.Count
-        </MudText>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.h6">
+                @(string.IsNullOrEmpty(NombrePunto) ? "Fotos del punto" : $"Fotos de {NombrePunto}")
+            </MudText>
+            <MudText Typo="Typo.body2" Color="Color.Secondary">
+                @(_indice + 1) de @Fotos.Count
+            </MudText>
+        </MudStack>
     </TitleContent>
     <DialogContent>
         <div style="position:relative; min-height:300px;">
@@ -17,20 +22,20 @@
                       Elevation="0" />
 
             @* Flechas de navegación *@
-            @if (_indice > 0)
-            {
+            <MudTooltip Text="Foto anterior" Placement="Placement.Right">
                 <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft"
                                Style="position:absolute;left:8px;top:50%;transform:translateY(-50%);
                                       background:rgba(0,0,0,.45);color:white;border-radius:50%;"
+                               Disabled="_indice == 0"
                                OnClick="() => _indice--" />
-            }
-            @if (_indice < Fotos.Count - 1)
-            {
+            </MudTooltip>
+            <MudTooltip Text="Foto siguiente" Placement="Placement.Left">
                 <MudIconButton Icon="@Icons.Material.Filled.ChevronRight"
                                Style="position:absolute;right:8px;top:50%;transform:translateY(-50%);
                                       background:rgba(0,0,0,.45);color:white;border-radius:50%;"
+                               Disabled="_indice >= Fotos.Count - 1"
                                OnClick="() => _indice++" />
-            }
+            </MudTooltip>
         </div>
 
         @* Metadata de la foto *@
@@ -84,6 +89,7 @@
 @code {
     [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
     [Parameter] public List<FotoDto> Fotos { get; set; } = new();
+    [Parameter] public string NombrePunto { get; set; } = "";
     [Parameter] public int IndiceInicial { get; set; } = 0;
 
     private int _indice;

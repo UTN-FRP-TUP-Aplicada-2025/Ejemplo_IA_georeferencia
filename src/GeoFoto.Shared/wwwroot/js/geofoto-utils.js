@@ -23,6 +23,20 @@ window.geoFotoUtils = {
         document.documentElement.style.setProperty(
             '--nav-bar-height',
             'env(safe-area-inset-bottom, 16px)');
+    },
+
+    // Obtener posición GPS para plataforma Web
+    getCurrentPosition: function () {
+        return new Promise(function (resolve) {
+            if (!navigator.geolocation) { resolve(null); return; }
+            navigator.geolocation.getCurrentPosition(
+                function (pos) {
+                    resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude, accuracy: pos.coords.accuracy });
+                },
+                function () { resolve(null); },
+                { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
+            );
+        });
     }
 };
 

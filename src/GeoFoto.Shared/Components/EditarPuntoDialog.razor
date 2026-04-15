@@ -1,0 +1,44 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Nuevo punto de registro</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudTextField @bind-Value="_nombre"
+                      Label="Nombre del punto"
+                      Placeholder="Nombre del punto"
+                      Variant="Variant.Outlined"
+                      Clearable="true"
+                      Margin="Margin.Dense" />
+        <MudTextField @bind-Value="_descripcion"
+                      Label="Descripción"
+                      Placeholder="Descripción (opcional)"
+                      Lines="3"
+                      Variant="Variant.Outlined"
+                      Class="mt-3"
+                      Margin="Margin.Dense" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Omitir" Variant="Variant.Text">Omitir</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   OnClick="Guardar">Guardar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public int PuntoId { get; set; }
+    [Parameter] public string? NombreInicial { get; set; }
+    [Parameter] public string? DescripcionInicial { get; set; }
+
+    private string? _nombre;
+    private string? _descripcion;
+
+    protected override void OnInitialized()
+    {
+        _nombre = NombreInicial;
+        _descripcion = DescripcionInicial;
+    }
+
+    private void Omitir() => MudDialog.Cancel();
+    private void Guardar() => MudDialog.Close(DialogResult.Ok((_nombre, _descripcion)));
+}

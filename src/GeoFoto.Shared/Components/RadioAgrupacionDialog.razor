@@ -1,0 +1,36 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">Radio de agrupación de fotos</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText Typo="Typo.body2" Class="mb-4">
+            Las fotos capturadas dentro de este radio se asocian automáticamente
+            al marker más cercano. Si no hay un marker dentro del radio, se crea uno nuevo.
+        </MudText>
+
+        <MudSlider @bind-Value="_radioMetros" Min="10" Max="500" Step="10"
+                   Color="Color.Primary" Class="mb-1">
+            Radio: @_radioMetros m
+        </MudSlider>
+
+        <MudNumericField @bind-Value="_radioMetros" Label="Radio en metros"
+                         Min="10" Max="500" Variant="Variant.Outlined" />
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">Cancelar</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   OnClick="Guardar">Guardar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public int RadioActual { get; set; } = 50;
+
+    private int _radioMetros;
+
+    protected override void OnInitialized() => _radioMetros = RadioActual;
+
+    private void Cancel() => MudDialog.Cancel();
+    private void Guardar() => MudDialog.Close(DialogResult.Ok(_radioMetros));
+}

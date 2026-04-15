@@ -10,6 +10,7 @@ namespace GeoFoto.Mobile;
 [Activity(
     Theme = "@style/Maui.SplashTheme",
     MainLauncher = true,
+    LaunchMode = LaunchMode.SingleTop,
     ConfigurationChanges =
         ConfigChanges.ScreenSize | ConfigChanges.Orientation |
         ConfigChanges.UiMode | ConfigChanges.ScreenLayout |
@@ -39,5 +40,29 @@ public class MainActivity : MauiAppCompatActivity
         // Barras del sistema semi-transparentes
         Window!.SetStatusBarColor(Android.Graphics.Color.Transparent);
         Window!.SetNavigationBarColor(Android.Graphics.Color.Transparent);
+    }
+
+    protected override void OnResume()
+    {
+        base.OnResume();
+        // Resume el WebView de Android al volver de la cámara u otras Activities.
+        // Sin esto, el BlazorWebView puede quedar en blanco al retornar al primer plano.
+        ResumeWebView(Window?.DecorView as Android.Views.ViewGroup);
+    }
+
+    private static void ResumeWebView(Android.Views.ViewGroup? parent)
+    {
+        if (parent is null) return;
+        for (var i = 0; i < parent.ChildCount; i++)
+        {
+            var child = parent.GetChildAt(i);
+            if (child is Android.Webkit.WebView webView)
+            {
+                webView.OnResume();
+                return;
+            }
+            if (child is Android.Views.ViewGroup group)
+                ResumeWebView(group);
+        }
     }
 }

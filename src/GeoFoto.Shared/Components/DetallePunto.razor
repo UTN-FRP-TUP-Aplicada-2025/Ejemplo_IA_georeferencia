@@ -24,20 +24,21 @@
         {
             @if (_punto.Fotos.Count > 0)
             {
-                <FotoCarousel Fotos="_punto.Fotos" />
+                <FotoCarousel Fotos="_punto.Fotos" NombrePunto="@(_nombre ?? $"Punto #{PuntoId}")" />
             }
 
             <MudStack Spacing="2" Class="mt-3">
                 <MudText Typo="Typo.caption" Color="Color.Secondary">
-                    @_punto.Latitud.ToString("F6")°, @_punto.Longitud.ToString("F6")°
+                    Lat: @_punto.Latitud.ToString("F4") · Lng: @_punto.Longitud.ToString("F4")
                     @if (_punto.FechaCreacion != default)
                     {
-                        <text> — @_punto.FechaCreacion.ToString("dd/MM/yyyy HH:mm")</text>
+                        <text> · Creado: @_punto.FechaCreacion.ToString("dd/MM/yyyy HH:mm")</text>
                     }
                 </MudText>
 
                 <MudTextField @bind-Value="_nombre"
                               Label="Nombre del punto"
+                              Placeholder="Nombre del punto"
                               Variant="Variant.Outlined"
                               Clearable="true"
                               Adornment="Adornment.Start"
@@ -46,9 +47,9 @@
 
                 <MudTextField @bind-Value="_descripcion"
                               Label="Descripción"
+                              Placeholder="Descripción (opcional)"
                               Variant="Variant.Outlined"
                               Lines="3"
-                              Placeholder="Agregá notas sobre este punto..."
                               Margin="Margin.Dense" />
             </MudStack>
 
@@ -69,7 +70,7 @@
                                StartIcon="@Icons.Material.Filled.AddPhotoAlternate"
                                Disabled="_agregando"
                                Size="Size.Small">
-                        @(_agregando ? "Agregando..." : "Agregar fotos")
+                        @(_agregando ? "Subiendo..." : "Agregar fotos")
                     </MudButton>
                 </ChildContent>
             </MudFileUpload>
@@ -158,7 +159,7 @@
         }
         else
         {
-            Snackbar.Add("Error al actualizar", Severity.Error);
+            Snackbar.Add("Error al guardar el punto", Severity.Error);
         }
         _guardando = false;
     }
@@ -173,7 +174,7 @@
         }
         else
         {
-            Snackbar.Add("Error al eliminar", Severity.Error);
+            Snackbar.Add("Error al eliminar el punto", Severity.Error);
         }
     }
 

@@ -49,20 +49,22 @@
             }
             else
             {
-                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">Sin fotos asociadas a este punto.</MudAlert>
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-2">Sin fotos</MudAlert>
             }
 
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
-                @_punto.Latitud.ToString("F6")°, @_punto.Longitud.ToString("F6")°
+                Lat: @_punto.Latitud.ToString("F4") · Lng: @_punto.Longitud.ToString("F4")
             </MudText>
 
             <MudTextField @bind-Value="_nombre"
                           Label="Nombre del punto"
+                          Placeholder="Nombre del punto"
                           Variant="Variant.Outlined"
                           Margin="Margin.Dense" />
 
             <MudTextField @bind-Value="_descripcion"
                           Label="Descripción"
+                          Placeholder="Descripción (opcional)"
                           Variant="Variant.Outlined"
                           Lines="3"
                           Margin="Margin.Dense" />
@@ -82,7 +84,7 @@
                                StartIcon="@Icons.Material.Filled.AddPhotoAlternate"
                                Disabled="_agregando"
                                Size="Size.Small">
-                        @(_agregando ? "Agregando..." : "Agregar fotos")
+                        @(_agregando ? "Subiendo..." : "Agregar fotos")
                     </MudButton>
                 </ChildContent>
             </MudFileUpload>

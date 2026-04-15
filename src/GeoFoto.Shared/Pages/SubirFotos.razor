@@ -11,8 +11,7 @@
 
 <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4">
     <MudText Typo="Typo.h5" GutterBottom="true">
-        <MudIcon Icon="@Icons.Material.Filled.AddPhotoAlternate" Class="mr-2" />
-        Subir fotografías
+        Subir fotografías georreferenciadas
     </MudText>
 
     <MudPaper Class="@($"pa-6 mb-4 upload-zone {(_subiendo ? "uploading" : "")}")"
@@ -34,10 +33,10 @@
                         <MudIcon Icon="@Icons.Material.Filled.CloudUpload"
                                  Style="font-size:3rem;" Color="Color.Primary" />
                         <MudText Typo="Typo.body1">
-                            <strong>Arrastrá tus fotos aquí</strong> o hacé click para elegir
+                            <strong>Arrastrá tus fotos o tocá para elegir</strong>
                         </MudText>
                         <MudText Typo="Typo.caption" Color="Color.Secondary">
-                            JPG, PNG, WEBP con datos GPS · Múltiples archivos
+                            Formatos: JPG, PNG, WebP
                         </MudText>
                         <MudButton HtmlTag="label" Variant="Variant.Outlined"
                                    Color="Color.Primary" Class="mt-2">

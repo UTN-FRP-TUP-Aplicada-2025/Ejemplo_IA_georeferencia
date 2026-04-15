@@ -27,7 +27,7 @@
             <div style="position:absolute; bottom:8px; right:8px;
                         background:rgba(0,0,0,.55); color:white;
                         padding:3px 8px; border-radius:12px; font-size:12px;">
-                @Fotos.Count foto(s)
+                📷 @Fotos.Count foto(s)
             </div>
 
             @* Indicador de foto actual *@
@@ -73,10 +73,10 @@
         @if (Fotos[_indice].FechaTomada.HasValue)
         {
             <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mt-1 px-1">
-                @Fotos[_indice].FechaTomada!.Value.ToString("dd/MM/yyyy HH:mm")
+                Foto @(_indice + 1) de @Fotos.Count
                 @if (Fotos[_indice].LatitudExif.HasValue)
                 {
-                    <span> · GPS: @Fotos[_indice].LatitudExif!.Value.ToString("F4")°,
+                    <span> · @Fotos[_indice].LatitudExif!.Value.ToString("F4")°,
                            @Fotos[_indice].LongitudExif!.Value.ToString("F4")°</span>
                 }
             </MudText>
@@ -86,6 +86,7 @@
 
 @code {
     [Parameter] public List<FotoDto> Fotos { get; set; } = new();
+    [Parameter] public string NombrePunto { get; set; } = "";
     [Inject] private IGeoFotoApiClient Api { get; set; } = default!;
     [Inject] private IDialogService Dialog { get; set; } = default!;
 
@@ -96,6 +97,7 @@
         var params_ = new DialogParameters<GaleriaFotosDialog>
         {
             { x => x.Fotos, Fotos },
+            { x => x.NombrePunto, NombrePunto },
             { x => x.IndiceInicial, _indice }
         };
         var opts = new DialogOptions
@@ -106,7 +108,7 @@
             CloseButton = true
         };
         var dialog = await Dialog.ShowAsync<GaleriaFotosDialog>(
-            "Fotos del punto", params_, opts);
+            "", params_, opts);
         var result = await dialog.Result;
         if (result?.Data is int nuevoIndice) _indice = nuevoIndice;
     }

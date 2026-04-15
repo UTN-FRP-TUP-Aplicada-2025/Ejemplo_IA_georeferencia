@@ -2,7 +2,8 @@ namespace GeoFoto.Shared.Models;
 
 public record PuntoDto(int Id, decimal Latitud, decimal Longitud,
     string? Nombre, string? Descripcion, DateTime FechaCreacion,
-    int CantidadFotos, int? PrimeraFotoId);
+    int CantidadFotos, int? PrimeraFotoId,
+    string? SyncStatus = null);
 
 public record PuntoDetalleDto(
     int Id, decimal Latitud, decimal Longitud,

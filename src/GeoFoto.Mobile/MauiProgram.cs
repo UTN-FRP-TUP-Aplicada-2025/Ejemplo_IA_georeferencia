@@ -1,4 +1,5 @@
 ﻿using GeoFoto.Mobile.Services;
+using GeoFoto.Shared.Models;
 using GeoFoto.Shared.Services;
 using Microsoft.Extensions.Logging;
 using MudBlazor.Services;
@@ -28,6 +29,14 @@ public static class MauiProgram
 
 		builder.Services.AddScoped<ICamaraService, CamaraService>();
 		builder.Services.AddScoped<IUbicacionService, MauiUbicacionService>();
+		builder.Services.AddScoped<IPermissionService, PermissionService>();
+		builder.Services.AddSingleton<IAppConfigService, MauiAppConfigService>();
+		builder.Services.AddSingleton<IRadioAssociationService>(_ =>
+		{
+			var svc = new RadioAssociationService();
+			svc.Configure(new AppConfig());
+			return svc;
+		});
 
 		builder.Services.AddSingleton<ILocalDbService>(_ =>
 			new LocalDbService(Path.Combine(FileSystem.Current.AppDataDirectory, "geofoto.db3")));
@@ -35,6 +44,7 @@ public static class MauiProgram
 		builder.Services.AddSingleton<IPreferencesService, MauiPreferencesService>();
 		builder.Services.AddScoped<IFotoUploadStrategy, LocalUploadStrategy>();
 		builder.Services.AddSingleton<ISyncService, SyncService>();
+		builder.Services.AddSingleton<SyncBackgroundService>();
 
 #if DEBUG
 		builder.Services.AddBlazorWebViewDeveloperTools();

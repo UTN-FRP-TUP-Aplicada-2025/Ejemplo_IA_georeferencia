@@ -1,18 +1,35 @@
 @inherits LayoutComponentBase
+@using GeoFoto.Shared.Services
+@using GeoFoto.Shared.Models
+@using Microsoft.Extensions.DependencyInjection
 @inject NavigationManager Nav
+@inject ISnackbar Snackbar
+@inject IServiceProvider SP
+@implements IDisposable
 
 <MudLayout>
     <MudAppBar Color="Color.Primary" Fixed="true" Dense="true">
         <MudText Typo="Typo.h6" Class="mr-4">GeoFoto</MudText>
-        <MudIconButton Icon="@Icons.Material.Filled.Map"
-                       OnClick="NavAMapa"
-                       title="Mapa" Color="Color.Inherit" />
-        <MudIconButton Icon="@Icons.Material.Filled.Upload"
-                       OnClick='() => Nav.NavigateTo("/subir")'
-                       title="Subir" Color="Color.Inherit" />
-        <MudIconButton Icon="@Icons.Material.Filled.List"
-                       OnClick='() => Nav.NavigateTo("/lista")'
-                       title="Lista" Color="Color.Inherit" />
+        <MudTooltip Text="Mapa">
+            <MudIconButton Icon="@Icons.Material.Filled.Map"
+                           OnClick="NavAMapa"
+                           Color="Color.Inherit" />
+        </MudTooltip>
+        <MudTooltip Text="Subir">
+            <MudIconButton Icon="@Icons.Material.Filled.Upload"
+                           OnClick='() => Nav.NavigateTo("/subir")'
+                           Color="Color.Inherit" />
+        </MudTooltip>
+        <MudTooltip Text="Lista">
+            <MudIconButton Icon="@Icons.Material.Filled.List"
+                           OnClick='() => Nav.NavigateTo("/lista")'
+                           Color="Color.Inherit" />
+        </MudTooltip>
+        <MudTooltip Text="Sync">
+            <MudIconButton Icon="@Icons.Material.Filled.Sync"
+                           OnClick='() => Nav.NavigateTo("/sync")'
+                           Color="Color.Inherit" />
+        </MudTooltip>
         <MudSpacer />
         <SyncStatusBadge />
     </MudAppBar>
@@ -28,6 +45,72 @@
 
 @code {
     [Parameter] public RenderFragment? ChildContent { get; set; }
+
+    private ISyncService? _syncService;
+    private IConnectivityService? _connectivity;
+    private bool _prevConnected = true;
+
+    protected override void OnInitialized()
+    {
+        _syncService = SP.GetService<ISyncService>();
+        _connectivity = SP.GetService<IConnectivityService>();
+
+        if (_syncService is not null)
+        {
+            _syncService.SyncCompleted += OnSyncCompleted;
+        }
+
+        if (_connectivity is not null)
+        {
+            _prevConnected = _connectivity.IsConnected;
+            _connectivity.ConnectivityChanged += OnConnectivityChanged;
+        }
+    }
+
+    private void OnSyncCompleted(object? sender, SyncCompletedEventArgs args)
+    {
+        InvokeAsync(() =>
+        {
+            if (args.Failed == 0)
+                Snackbar.Add(
+                    $"Sincronización completa: {args.Successful} operaciones procesadas",
+                    Severity.Success,
+                    c => c.VisibleStateDuration = 5000);
+            else
+                Snackbar.Add(
+                    "Error en la sincronización. Revisá el estado en Sync.",
+                    Severity.Error,
+                    c => c.VisibleStateDuration = 10000);
+            StateHasChanged();
+        });
+    }
+
+    private void OnConnectivityChanged(object? sender, bool isConnected)
+    {
+        InvokeAsync(() =>
+        {
+            if (isConnected && !_prevConnected)
+                Snackbar.Add(
+                    "Conexión restaurada — sincronizando...",
+                    Severity.Success,
+                    c => c.VisibleStateDuration = 3000);
+            else if (!isConnected && _prevConnected)
+                Snackbar.Add(
+                    "Sin conexión — los datos se guardan en el dispositivo",
+                    Severity.Info,
+                    c => c.VisibleStateDuration = 5000);
+            _prevConnected = isConnected;
+            StateHasChanged();
+        });
+    }
+
+    public void Dispose()
+    {
+        if (_syncService is not null)
+            _syncService.SyncCompleted -= OnSyncCompleted;
+        if (_connectivity is not null)
+            _connectivity.ConnectivityChanged -= OnConnectivityChanged;
+    }
 
     private void NavAMapa()
     {

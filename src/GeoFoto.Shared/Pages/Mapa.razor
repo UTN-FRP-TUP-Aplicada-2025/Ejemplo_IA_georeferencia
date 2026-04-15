@@ -6,6 +6,7 @@
 @using Microsoft.Extensions.Logging
 @using Microsoft.Extensions.DependencyInjection
 @using System.Globalization
+@using System.IO
 @inject IGeoFotoApiClient Api
 @inject IJSRuntime JS
 @inject IDialogService DialogService
@@ -58,7 +59,33 @@ else
 
         @* Botón GPS — posicionado sobre el mapa *@
         <div style="position:absolute; bottom:calc(16px + var(--nav-bar-height));
-                    right:16px; z-index:1000;">
+                    right:16px; z-index:1000; display:flex; flex-direction:column; gap:8px;">
+
+            @* MEJORA 4: Radio de agrupación *@
+            @if (_esMovil)
+            {
+                <MudTooltip Text="Radio de agrupación" Placement="Placement.Left">
+                    <MudFab Color="Color.Secondary"
+                            StartIcon="@Icons.Material.Filled.Radar"
+                            Size="Size.Small"
+                            OnClick="AbrirConfigRadio"
+                            Style="box-shadow: 0 2px 8px rgba(0,0,0,.3);" />
+                </MudTooltip>
+            }
+
+            @* MEJORA 3: Cámara (solo mobile) *@
+            @if (_esMovil)
+            {
+                <MudTooltip Text="Tomar foto" Placement="Placement.Left">
+                    <MudFab Color="Color.Tertiary"
+                            StartIcon="@Icons.Material.Filled.CameraAlt"
+                            Size="Size.Large"
+                            OnClick="OnCapturaFoto"
+                            Style="box-shadow: 0 2px 8px rgba(0,0,0,.3);" />
+                </MudTooltip>
+            }
+
+            @* Centrar GPS *@
             <MudTooltip Text="Centrar en mi ubicación" Placement="Placement.Left">
                 <MudFab Color="Color.Primary"
                         StartIcon="@(_buscandoGps
@@ -73,25 +100,21 @@ else
     </div>
 }
 
-@* Diálogo de permiso de ubicación denegado *@
+@* Diálogo de permiso de ubicación denegado permanentemente §4.1 *@
 <MudDialog @bind-Visible="_mostrarDialogoGps">
     <TitleContent>
-        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="2">
-            <MudIcon Icon="@Icons.Material.Filled.LocationOff" Color="Color.Warning" />
-            <MudText Typo="Typo.h6">Ubicación no disponible</MudText>
-        </MudStack>
+        <MudText Typo="Typo.h6">Ubicación deshabilitada</MudText>
     </TitleContent>
     <DialogContent>
-        <MudText Class="mb-2">@_gpsError</MudText>
-        <MudText Typo="Typo.body2" Color="Color.Secondary">
-            Para usar esta función, habilitá el permiso de ubicación
-            en la configuración de la aplicación.
+        <MudText>
+            GeoFoto necesita acceso a tu ubicación para funcionar correctamente.
+            Podés habilitarla desde la configuración del dispositivo.
         </MudText>
     </DialogContent>
     <DialogActions>
         <MudButton OnClick="() => _mostrarDialogoGps = false"
                    Variant="Variant.Text">
-            Volver
+            Continuar sin ubicación
         </MudButton>
         <MudButton Color="Color.Primary" Variant="Variant.Filled"
                    StartIcon="@Icons.Material.Filled.Settings"
@@ -120,6 +143,13 @@ else
     private bool _gpsInicialIntentado;
     private UbicacionResult? _gpsInicial;
 
+    // MEJORA 2, 3, 4 — servicios Mobile inyectados dinámicamente
+    private bool _esMovil;
+    private ICamaraService? _camaraService;
+    private IAppConfigService? _appConfigService;
+    private IRadioAssociationService? _radioService;
+    private int? _marcadorActivoId; // LocalId del marker seleccionado (MEJORA 3)
+
     [SupplyParameterFromQuery(Name = "t")]
     public string? RefreshToken { get; set; }
 
@@ -137,6 +167,19 @@ else
         _ubicacionService = SP.GetService<IUbicacionService>();
         _localDb = SP.GetService<ILocalDbService>();
         _usarDatosLocales = _localDb is not null;
+
+        // MEJORA 2, 3, 4 — servicios presentes solo en Mobile
+        _camaraService = SP.GetService<ICamaraService>();
+        _appConfigService = SP.GetService<IAppConfigService>();
+        _radioService = SP.GetService<IRadioAssociationService>();
+        _esMovil = _ubicacionService is not null;
+
+        // MEJORA 4: sincronizar radio guardado con RadioAssociationService
+        if (_appConfigService is not null && _radioService is not null)
+        {
+            var radio = await _appConfigService.GetRadioAgrupacionMetrosAsync();
+            _radioService.Configure(new AppConfig { RadioAsociacionMetros = radio });
+        }
 
         // Lanzar GPS de inmediato para pedir permisos antes de que el mapa se inicialice
         var tareaGps = _ubicacionService is not null
@@ -163,6 +206,15 @@ else
         // Esperar GPS (máx. 1.5 s) — con last-known location responde en < 200 ms.
         // Si no responde a tiempo, OnAfterRenderAsync centra el mapa cuando llegue.
         await Task.WhenAny(tareaGps, Task.Delay(1500));
+
+        // MEJORA 1: aviso si GPS no disponible (§6)
+        if (_gpsInicial is null && _ubicacionService is not null)
+        {
+            Snackbar.Add(
+                "No se pudo obtener la ubicación — mostrando posición predeterminada",
+                Severity.Warning);
+        }
+
         _cargando = false;
     }
 
@@ -389,8 +441,7 @@ else
                     await JS.InvokeVoidAsync("leafletInterop.mostrarPosicionGps",
                         result.Latitud, result.Longitud, result.Precision);
                     _centradoInicialPorGps = true;
-                    Snackbar.Add($"Ubicación obtenida — precisión: {Math.Round(result.Precision)}m",
-                        Severity.Success);
+                    // §6: No mostrar snackbar cuando la ubicación se obtiene exitosamente
                 }
                 else if (result.PermisoDenegado)
                 {
@@ -399,7 +450,8 @@ else
                 }
                 else
                 {
-                    Snackbar.Add($"GPS: {result.Error}", Severity.Warning);
+                    Snackbar.Add("No se pudo obtener la ubicación — mostrando posición predeterminada",
+                        Severity.Warning);
                 }
             }
             else
@@ -433,7 +485,7 @@ else
     {
         _buscandoGps = false;
         _centradoInicialPorGps = true;
-        Snackbar.Add($"Ubicación obtenida — precisión: {Math.Round(precision)}m", Severity.Success);
+        // §6: No mostrar snackbar cuando la ubicación se obtiene exitosamente
         StateHasChanged();
         return Task.CompletedTask;
     }
@@ -451,6 +503,7 @@ else
     [JSInvokable]
     public async Task OnMarkerClicked(int puntoId)
     {
+        _marcadorActivoId = puntoId; // MEJORA 3: tracking del marker activo
         var options = new DialogOptions
         {
             MaxWidth = MaxWidth.Medium,
@@ -488,6 +541,158 @@ else
             {
                 await JS.InvokeVoidAsync("leafletInterop.addMarkers", _puntos, _dotnetRef, false);
             }
+        }
+    }
+
+    // MEJORA 3: Flujo de captura de foto con asociación por radio (Haversine)
+    private async Task OnCapturaFoto()
+    {
+        if (_camaraService is null || _localDb is null) return;
+
+        var stream = await _camaraService.TomarFotoAsync();
+        if (stream is null) return; // usuario canceló
+
+        // Leer los bytes INMEDIATAMENTE: el archivo temporal de la cámara puede eliminarse
+        // antes de que los awaits posteriores (GPS, DB) terminen en Android.
+        byte[] fotoBytes;
+        using (var streamMs = new MemoryStream())
+        {
+            await stream.CopyToAsync(streamMs);
+            fotoBytes = streamMs.ToArray();
+        }
+
+        // Re-sincronizar el dispatcher de Blazor tras volver de la actividad de cámara.
+        // Sin esto, DialogService.ShowAsync puede no renderizar el diálogo correctamente.
+        await InvokeAsync(StateHasChanged);
+
+        // Forzar repintado del mapa: el WebView puede quedar en blanco al volver de cámara
+        if (_mapaListo)
+            await JS.InvokeVoidAsync("leafletInterop.invalidateSize");
+
+        // Obtener posición GPS actual
+        UbicacionResult? pos = null;
+        if (_ubicacionService is not null)
+        {
+            var r = await _ubicacionService.ObtenerUbicacionAsync();
+            if (r.Ok) pos = r;
+        }
+
+        await _localDb.InitializeAsync();
+        var puntos = await _localDb.GetPuntosAsync();
+
+        // Determinar a qué punto asociar la foto
+        LocalPunto? marcador = null;
+        if (_marcadorActivoId.HasValue)
+        {
+            marcador = await _localDb.GetPuntoAsync(_marcadorActivoId.Value);
+        }
+        else if (pos is not null && _radioService is not null)
+        {
+            var activos = puntos.Where(p => p.SyncStatus != SyncStatusValues.PendingDelete);
+            marcador = _radioService.BuscarMarkerDentroDeRadio(activos, pos.Latitud, pos.Longitud);
+        }
+
+        int puntoLocalId;
+        bool esPrimeraFoto;
+
+        if (marcador is not null)
+        {
+            puntoLocalId = marcador.LocalId;
+            var fotosExistentes = await _localDb.GetFotosByPuntoAsync(puntoLocalId);
+            esPrimeraFoto = !fotosExistentes.Any(f => f.SyncStatus != SyncStatusValues.PendingDelete);
+        }
+        else
+        {
+            // Crear nuevo punto en la posición actual
+            var lat = pos is not null ? (decimal)pos.Latitud : 0m;
+            var lng = pos is not null ? (decimal)pos.Longitud : 0m;
+            var nuevoPunto = new LocalPunto
+            {
+                Latitud = lat, Longitud = lng,
+                SyncStatus = SyncStatusValues.PendingCreate
+            };
+            puntoLocalId = await _localDb.InsertPuntoAsync(nuevoPunto);
+            await _localDb.EnqueueAsync("Create", "Punto", puntoLocalId,
+                System.Text.Json.JsonSerializer.Serialize(nuevoPunto));
+            nuevoPunto.LocalId = puntoLocalId;
+            marcador = nuevoPunto;
+            esPrimeraFoto = true;
+        }
+
+        // Guardar la foto en disco
+        var photosDir = Path.Combine(
+            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+            "photos");
+        Directory.CreateDirectory(photosDir);
+        var localPath = Path.Combine(photosDir, $"{Guid.NewGuid()}.jpg");
+        await File.WriteAllBytesAsync(localPath, fotoBytes);
+
+        var foto = new LocalFoto
+        {
+            PuntoLocalId = puntoLocalId,
+            NombreArchivo = Path.GetFileName(localPath),
+            RutaLocal = localPath,
+            LatitudExif = pos is not null ? (decimal)pos.Latitud : null,
+            LongitudExif = pos is not null ? (decimal)pos.Longitud : null,
+            SyncStatus = SyncStatusValues.PendingCreate
+        };
+        var fotoId = await _localDb.InsertFotoAsync(foto);
+        await _localDb.EnqueueAsync("Create", "Foto", fotoId,
+            System.Text.Json.JsonSerializer.Serialize(foto));
+
+        if (esPrimeraFoto)
+        {
+            Snackbar.Add("Foto guardada — completá los datos del punto", Severity.Success);
+            var dlgParams = new DialogParameters<EditarPuntoDialog>
+            {
+                { x => x.NombreInicial, marcador.Nombre },
+                { x => x.DescripcionInicial, marcador.Descripcion }
+            };
+            var dlg = await DialogService.ShowAsync<EditarPuntoDialog>("", dlgParams,
+                new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+            var result = await dlg.Result;
+            if (!result.Canceled && result.Data is ValueTuple<string?, string?> datos)
+            {
+                marcador.Nombre = datos.Item1;
+                marcador.Descripcion = datos.Item2;
+                await _localDb.UpdatePuntoAsync(marcador);
+            }
+        }
+        else
+        {
+            Snackbar.Add("Foto agregada al punto", Severity.Success);
+        }
+
+        // Recentrar mapa y recargar marcadores
+        if (pos is not null && _mapaListo)
+            await JS.InvokeVoidAsync("leafletInterop.mostrarPosicionGps",
+                pos.Latitud, pos.Longitud, pos.Precision);
+
+        await CargarPuntosAsync();
+        if (_mapaListo)
+        {
+            await JS.InvokeVoidAsync("leafletInterop.addMarkers", _puntos, _dotnetRef, false);
+            await JS.InvokeVoidAsync("leafletInterop.invalidateSize");
+        }
+    }
+
+    // MEJORA 4: Dialog de configuración de radio de agrupación
+    private async Task AbrirConfigRadio()
+    {
+        if (_appConfigService is null) return;
+        var radioActual = await _appConfigService.GetRadioAgrupacionMetrosAsync();
+        var dlgParams = new DialogParameters<RadioAgrupacionDialog>
+        {
+            { x => x.RadioActual, radioActual }
+        };
+        var dlg = await DialogService.ShowAsync<RadioAgrupacionDialog>("", dlgParams,
+            new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+        var result = await dlg.Result;
+        if (!result.Canceled && result.Data is int nuevoRadio)
+        {
+            await _appConfigService.SetRadioAgrupacionMetrosAsync(nuevoRadio);
+            _radioService?.Configure(new AppConfig { RadioAsociacionMetros = nuevoRadio });
+            Snackbar.Add($"Radio de agrupación actualizado a {nuevoRadio} m", Severity.Info);
         }
     }
 

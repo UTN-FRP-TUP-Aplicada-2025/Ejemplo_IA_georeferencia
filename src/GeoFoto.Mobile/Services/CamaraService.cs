@@ -1,10 +1,6 @@
-namespace GeoFoto.Mobile;
+using GeoFoto.Shared.Services;
 
-public interface ICamaraService
-{
-    Task<Stream?> TomarFotoAsync();
-    Task<Stream?> ElegirDeGaleriaAsync();
-}
+namespace GeoFoto.Mobile;
 
 public class CamaraService : ICamaraService
 {

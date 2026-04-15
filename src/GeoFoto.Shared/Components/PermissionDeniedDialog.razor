@@ -1,0 +1,25 @@
+<MudDialog>
+    <TitleContent>
+        <MudText Typo="Typo.h6">@Title</MudText>
+    </TitleContent>
+    <DialogContent>
+        <MudText>@Message</MudText>
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cancel" Variant="Variant.Text">@SecondaryText</MudButton>
+        <MudButton Color="Color.Primary" Variant="Variant.Filled"
+                   StartIcon="@Icons.Material.Filled.Settings"
+                   OnClick="GoToSettings">@PrimaryText</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public string Title { get; set; } = "";
+    [Parameter] public string Message { get; set; } = "";
+    [Parameter] public string PrimaryText { get; set; } = "Ir a Configuración";
+    [Parameter] public string SecondaryText { get; set; } = "Cancelar";
+
+    private void Cancel() => MudDialog.Cancel();
+    private void GoToSettings() => MudDialog.Close(DialogResult.Ok(true));
+}

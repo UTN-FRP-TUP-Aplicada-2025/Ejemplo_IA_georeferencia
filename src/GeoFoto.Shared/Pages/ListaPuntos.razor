@@ -1,10 +1,13 @@
-@page "/lista"
+﻿@page "/lista"
 @attribute [StreamRendering]
 @using GeoFoto.Shared.Models
 @using GeoFoto.Shared.Services
+@using Microsoft.Extensions.DependencyInjection
 @inject IGeoFotoApiClient Api
 @inject IDialogService Dialog
 @inject ISnackbar Snackbar
+@inject NavigationManager Nav
+@inject IServiceProvider SP
 
 <PageTitle>Lista de Puntos - GeoFoto</PageTitle>
 
@@ -43,44 +46,83 @@
     }
     else
     {
-        <MudTextField @bind-Value="_busqueda" Label="Buscar por nombre"
-                  Adornment="Adornment.Start" AdornmentIcon="@Icons.Material.Filled.Search"
-                  Variant="Variant.Outlined" Margin="Margin.Dense" Class="mb-3"
-                  Immediate="true" />
+        <MudTextField @bind-Value="_busqueda"
+                      Placeholder="Buscar por nombre..."
+                      Adornment="Adornment.Start"
+                      AdornmentIcon="@Icons.Material.Filled.Search"
+                      Variant="Variant.Outlined"
+                      Margin="Margin.Dense"
+                      Class="mb-3"
+                      Immediate="true" />
 
-    <MudTable Items="PuntosFiltrados" Hover="true" Dense="true" Loading="_cargando"
-              RowsPerPage="20">
-        <HeaderContent>
-            <MudTh>Foto</MudTh>
-            <MudTh><MudTableSortLabel SortBy="new Func<PuntoDto,object>(p=>p.Nombre??string.Empty)">Nombre</MudTableSortLabel></MudTh>
-            <MudTh>Latitud</MudTh>
-            <MudTh>Longitud</MudTh>
-            <MudTh>Fotos</MudTh>
-            <MudTh>Acciones</MudTh>
-        </HeaderContent>
-        <RowTemplate>
-            <MudTd>
-                @if (context.PrimeraFotoId.HasValue)
+        <MudTable Items="PuntosFiltrados" Hover="true" Dense="true" Loading="_cargando"
+                  RowsPerPage="20"
+                  OnRowClick="@((TableRowClickEventArgs<PuntoDto> args) => IrAlMapa(args.Item))"
+                  RowStyle="cursor:pointer;">
+            <HeaderContent>
+                <MudTh>Foto</MudTh>
+                <MudTh><MudTableSortLabel SortBy="new Func<PuntoDto,object>(p=>p.Nombre??string.Empty)">Nombre</MudTableSortLabel></MudTh>
+                <MudTh>Ubicación</MudTh>
+                <MudTh>Fotos</MudTh>
+                <MudTh>Estado</MudTh>
+                <MudTh>Acciones</MudTh>
+            </HeaderContent>
+            <RowTemplate>
+                <MudTd>
+                    @if (context.PrimeraFotoId.HasValue)
+                    {
+                        <img src="@Api.GetFotoUrl(context.PrimeraFotoId.Value)"
+                             style="height:40px;width:40px;object-fit:cover;border-radius:4px" />
+                    }
+                </MudTd>
+                <MudTd>@(context.Nombre ?? "—")</MudTd>
+                <MudTd>
+                    <MudText Typo="Typo.caption">
+                        @context.Latitud.ToString("F4"), @context.Longitud.ToString("F4")
+                    </MudText>
+                </MudTd>
+                <MudTd>
+                    <MudChip T="string" Size="Size.Small" Color="Color.Info">@context.CantidadFotos</MudChip>
+                </MudTd>
+                <MudTd>
+                    @{
+                        var (chipColor, chipText) = SyncChip(context);
+                    }
+                    <MudChip T="string" Size="Size.Small" Color="@chipColor">@chipText</MudChip>
+                </MudTd>
+                <MudTd>
+                    <div @onclick:stopPropagation="true">
+                    <MudTooltip Text="Editar punto">
+                        <MudIconButton Icon="@Icons.Material.Filled.Edit"
+                                       OnClick="@(async () => await AbrirDetalle(context))"
+                                       Size="Size.Small" />
+                    </MudTooltip>
+                    <MudTooltip Text="Eliminar punto">
+                        <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
+                                       OnClick="@(() => PedirConfirmacion(context))"
+                                       Size="Size.Small" />
+                    </MudTooltip>
+                    </div>
+                </MudTd>
+            </RowTemplate>
+            <NoRecordsContent>
+                @if (string.IsNullOrEmpty(_busqueda))
                 {
-                    <img src="@Api.GetFotoUrl(context.PrimeraFotoId.Value)"
-                         style="height:40px;width:40px;object-fit:cover;border-radius:4px" />
+                    <MudAlert Severity="Severity.Info">
+                        No hay puntos registrados. Comenzá capturando fotos desde el mapa.
+                    </MudAlert>
                 }
-            </MudTd>
-            <MudTd>@(context.Nombre ?? "—")</MudTd>
-            <MudTd>@context.Latitud.ToString("F6")</MudTd>
-            <MudTd>@context.Longitud.ToString("F6")</MudTd>
-            <MudTd><MudChip T="string" Size="Size.Small" Color="Color.Info">@context.CantidadFotos</MudChip></MudTd>
-            <MudTd>
-                <MudIconButton Icon="@Icons.Material.Filled.Edit"
-                               OnClick="() => AbrirDetalle(context)" Size="Size.Small" />
-                <MudIconButton Icon="@Icons.Material.Filled.Delete" Color="Color.Error"
-                               OnClick="() => PedirConfirmacion(context)" Size="Size.Small" />
-            </MudTd>
-        </RowTemplate>
-        <PagerContent>
-            <MudTablePager PageSizeOptions="new int[] { 10, 20, 50, 100 }" />
-        </PagerContent>
-    </MudTable>
+                else
+                {
+                    <MudAlert Severity="Severity.Info">
+                        No se encontraron puntos con ese nombre
+                    </MudAlert>
+                }
+            </NoRecordsContent>
+            <PagerContent>
+                <MudTablePager PageSizeOptions="new int[] { 10, 20, 50, 100 }" />
+            </PagerContent>
+        </MudTable>
     }
 </MudContainer>
 
@@ -90,11 +132,13 @@
     </TitleContent>
     <DialogContent>
         <MudText>
-            ¿Eliminar '@(_puntoAEliminar?.Nombre ?? "sin nombre")' y sus @(_puntoAEliminar?.CantidadFotos ?? 0) foto(s)?
+            ¿Estás seguro de eliminar «@(_puntoAEliminar?.Nombre ?? "sin nombre")»?
+            Se eliminarán también las @(_puntoAEliminar?.CantidadFotos ?? 0) foto(s) asociadas.
+            Esta acción no se puede deshacer.
         </MudText>
     </DialogContent>
     <DialogActions>
-        <MudButton OnClick="CancelarEliminar">Cancelar</MudButton>
+        <MudButton OnClick="CancelarEliminar" Variant="Variant.Text">Cancelar</MudButton>
         <MudButton Color="Color.Error" Variant="Variant.Filled" OnClick="EjecutarEliminar">Eliminar</MudButton>
     </DialogActions>
 </MudDialog>
@@ -106,6 +150,7 @@
     private bool _confirmVisible;
     private PuntoDto? _puntoAEliminar;
     private string? _error;
+    private ILocalDbService? _localDb;
 
     private IEnumerable<PuntoDto> PuntosFiltrados => string.IsNullOrWhiteSpace(_busqueda)
         ? _puntos
@@ -113,6 +158,7 @@
 
     protected override async Task OnInitializedAsync()
     {
+        _localDb = SP.GetService<ILocalDbService>();
         await CargarPuntosAsync();
     }
 
@@ -120,7 +166,28 @@
     {
         try
         {
-            _puntos = (await Api.GetPuntosAsync()).ToList();
+            if (_localDb is not null)
+            {
+                await _localDb.InitializeAsync();
+                var locales = (await _localDb.GetPuntosAsync())
+                    .Where(p => p.SyncStatus != SyncStatusValues.PendingDelete)
+                    .ToList();
+
+                _puntos = locales.Select(p => new PuntoDto(
+                    p.LocalId,
+                    p.Latitud,
+                    p.Longitud,
+                    p.Nombre,
+                    p.Descripcion,
+                    DateTime.TryParse(p.FechaCreacion, out var d) ? d : DateTime.UtcNow,
+                    0,
+                    null,
+                    p.SyncStatus)).ToList();
+            }
+            else
+            {
+                _puntos = (await Api.GetPuntosAsync()).ToList();
+            }
             _error = null;
         }
         catch (GeoFotoApiException ex)
@@ -145,12 +212,30 @@
         await CargarPuntosAsync();
     }
 
+    private void IrAlMapa(PuntoDto punto)
+    {
+        var lat = ((double)punto.Latitud).ToString("F7", System.Globalization.CultureInfo.InvariantCulture);
+        var lng = ((double)punto.Longitud).ToString("F7", System.Globalization.CultureInfo.InvariantCulture);
+        Nav.NavigateTo($"/?lat={lat}&lng={lng}&puntoId={punto.Id}");
+    }
+
     private async Task AbrirDetalle(PuntoDto punto)
     {
-        var parameters = new DialogParameters<GeoFoto.Shared.Components.DetallePunto>
+        DialogParameters parameters;
+        Type dlgType;
+
+        if (_localDb is not null)
         {
-            { x => x.PuntoId, punto.Id }
-        };
+            parameters = new DialogParameters();
+            parameters.Add("PuntoLocalId", punto.Id);
+            dlgType = typeof(GeoFoto.Shared.Components.DetallePuntoLocal);
+        }
+        else
+        {
+            parameters = new DialogParameters();
+            parameters.Add("PuntoId", punto.Id);
+            dlgType = typeof(GeoFoto.Shared.Components.DetallePunto);
+        }
 
         var options = new DialogOptions
         {
@@ -159,13 +244,11 @@
             CloseOnEscapeKey = true
         };
 
-        var dialog = await Dialog.ShowAsync<GeoFoto.Shared.Components.DetallePunto>(
-            "Detalle del punto", parameters, options);
+        var dialog = await Dialog.ShowAsync(dlgType, "Detalle del punto", parameters, options);
         var result = await dialog.Result;
         if (result is not null && !result.Canceled)
         {
-            try { _puntos = (await Api.GetPuntosAsync()).ToList(); }
-            catch { Snackbar.Add("No se pudo refrescar la lista", Severity.Warning); }
+            await CargarPuntosAsync();
         }
     }
 
@@ -187,16 +270,34 @@
         {
             try
             {
-                await Api.DeletePuntoAsync(_puntoAEliminar.Id);
+                if (_localDb is not null)
+                    await _localDb.DeletePuntoAsync(_puntoAEliminar.Id);
+                else
+                    await Api.DeletePuntoAsync(_puntoAEliminar.Id);
                 _puntos.Remove(_puntoAEliminar);
                 Snackbar.Add("Punto eliminado", Severity.Success);
             }
             catch (GeoFotoApiException ex)
             {
-                Snackbar.Add($"Error al eliminar: {ex.Message}", Severity.Error);
+                Snackbar.Add($"Error al eliminar el punto", Severity.Error);
+            }
+            catch
+            {
+                Snackbar.Add("Error al eliminar el punto", Severity.Error);
             }
         }
         _confirmVisible = false;
         _puntoAEliminar = null;
     }
+
+    private static (Color color, string text) SyncChip(PuntoDto p) =>
+        p.SyncStatus switch
+        {
+            SyncStatusValues.Synced => (Color.Success, "Sincronizado"),
+            SyncStatusValues.PendingCreate => (Color.Warning, "Pendiente"),
+            SyncStatusValues.PendingUpdate => (Color.Warning, "Pendiente"),
+            SyncStatusValues.PendingDelete => (Color.Warning, "Pendiente"),
+            SyncStatusValues.Failed => (Color.Error, "Fallido"),
+            _ => (Color.Default, "—")
+        };
 }
