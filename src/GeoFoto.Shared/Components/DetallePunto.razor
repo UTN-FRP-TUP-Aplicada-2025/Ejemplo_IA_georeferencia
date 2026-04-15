@@ -24,7 +24,7 @@
         {
             @if (_punto.Fotos.Count > 0)
             {
-                <FotoCarousel Fotos="_punto.Fotos" NombrePunto="@(_nombre ?? $"Punto #{PuntoId}")" />
+                <FotoCarousel Fotos="_punto.Fotos" NombrePunto="@(_nombre ?? $"Punto #{PuntoId}")" PuntoId="PuntoId" OnFotosChanged="CargarPuntoAsync" />
             }
 
             <MudStack Spacing="2" Class="mt-3">
@@ -129,13 +129,19 @@
 
     protected override async Task OnInitializedAsync()
     {
+        await CargarPuntoAsync();
+        _loading = false;
+    }
+
+    private async Task CargarPuntoAsync()
+    {
         _punto = await Api.GetPuntoAsync(PuntoId);
         if (_punto is not null)
         {
             _nombre = _punto.Nombre;
             _descripcion = _punto.Descripcion;
         }
-        _loading = false;
+        StateHasChanged();
     }
 
     private async Task CentrarEnMapa()

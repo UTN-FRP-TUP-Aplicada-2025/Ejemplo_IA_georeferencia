@@ -31,11 +31,13 @@ public class SyncApiService : ISyncApiService
 
         var puntosQuery = _db.Puntos.AsQueryable();
         var fotosQuery = _db.Fotos.AsQueryable();
+        var deletedQuery = _db.DeletedEntities.AsQueryable();
 
         if (sinceDate.HasValue)
         {
             puntosQuery = puntosQuery.Where(p => p.UpdatedAt > sinceDate.Value);
             fotosQuery = fotosQuery.Where(f => f.UpdatedAt > sinceDate.Value);
+            deletedQuery = deletedQuery.Where(d => d.DeletedAt > sinceDate.Value);
         }
 
         var puntos = await puntosQuery
@@ -55,7 +57,11 @@ public class SyncApiService : ISyncApiService
                 f.LatitudExif, f.LongitudExif))
             .ToListAsync(ct);
 
-        return new SyncDeltaDto(puntos, fotos);
+        var eliminados = await deletedQuery
+            .Select(d => new DeletedEntityDto(d.EntityType, d.EntityId))
+            .ToListAsync(ct);
+
+        return new SyncDeltaDto(puntos, fotos, eliminados);
     }
 
     public async Task<BatchResultDto> ProcessBatchAsync(IReadOnlyList<SyncOperationDto> operations, CancellationToken ct = default)
@@ -165,8 +171,12 @@ public class SyncApiService : ISyncApiService
                     return new SyncOperationResultDto(op.LocalId, true, null, null);
 
                 foreach (var foto in punto.Fotos)
+                {
                     _storage.Delete(foto.RutaFisica);
+                    _db.DeletedEntities.Add(new Models.DeletedEntity { EntityType = "Foto", EntityId = foto.Id, DeletedAt = DateTime.UtcNow });
+                }
 
+                _db.DeletedEntities.Add(new Models.DeletedEntity { EntityType = "Punto", EntityId = punto.Id, DeletedAt = DateTime.UtcNow });
                 _db.Puntos.Remove(punto);
                 return new SyncOperationResultDto(op.LocalId, true, null, null);
             }
@@ -197,6 +207,7 @@ public class SyncApiService : ISyncApiService
                 if (foto is not null)
                 {
                     _storage.Delete(foto.RutaFisica);
+                    _db.DeletedEntities.Add(new Models.DeletedEntity { EntityType = "Foto", EntityId = foto.Id, DeletedAt = DateTime.UtcNow });
                     _db.Fotos.Remove(foto);
                 }
                 return new SyncOperationResultDto(op.LocalId, true, null, null);

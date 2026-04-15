@@ -368,7 +368,8 @@ else
                     p.Descripcion,
                     fecha,
                     fotosActivas,
-                    null));
+                    null,
+                    p.SyncStatus));
             }
 
             _puntos = puntosLocales
@@ -597,6 +598,9 @@ else
                 if (r.Ok) pos = r;
             }
 
+            // Usar última posición conocida como fallback si el GPS falló en esta captura
+            var posEfectiva = pos ?? _gpsInicial;
+
             await _localDb.InitializeAsync();
             var puntos = await _localDb.GetPuntosAsync();
 
@@ -605,11 +609,12 @@ else
             if (_marcadorActivoId.HasValue)
             {
                 marcador = await _localDb.GetPuntoAsync(_marcadorActivoId.Value);
+                _marcadorActivoId = null; // limpiar para evitar asociación incorrecta en capturas futuras
             }
-            else if (pos is not null && _radioService is not null)
+            else if (posEfectiva is not null && _radioService is not null)
             {
                 var activos = puntos.Where(p => p.SyncStatus != SyncStatusValues.PendingDelete);
-                marcador = _radioService.BuscarMarkerDentroDeRadio(activos, pos.Latitud, pos.Longitud);
+                marcador = _radioService.BuscarMarkerDentroDeRadio(activos, posEfectiva.Latitud, posEfectiva.Longitud);
             }
 
             int puntoLocalId;
@@ -623,9 +628,17 @@ else
             }
             else
             {
-                // Crear nuevo punto en la posición actual
-                var lat = pos is not null ? (decimal)pos.Latitud : 0m;
-                var lng = pos is not null ? (decimal)pos.Longitud : 0m;
+                // Sin GPS ni marcador activo: no crear un punto en coordenadas (0,0)
+                if (posEfectiva is null)
+                {
+                    await InvokeAsync(() =>
+                        Snackbar.Add("GPS no disponible. Activá la ubicación o tocá un marcador antes de fotografiar.", Severity.Warning));
+                    return;
+                }
+
+                // Crear nuevo punto en la posición actual (o última conocida)
+                var lat = (decimal)posEfectiva.Latitud;
+                var lng = (decimal)posEfectiva.Longitud;
                 var nuevoPunto = new LocalPunto
                 {
                     Latitud = lat, Longitud = lng,
@@ -656,8 +669,10 @@ else
                 PuntoLocalId = puntoLocalId,
                 NombreArchivo = Path.GetFileName(localPath),
                 RutaLocal = localPath,
-                LatitudExif = pos is not null ? (decimal)pos.Latitud : null,
-                LongitudExif = pos is not null ? (decimal)pos.Longitud : null,
+                FechaTomada = DateTime.UtcNow.ToString("O"),
+                TamanoBytes = fotoBytes.Length,
+                LatitudExif = posEfectiva is not null ? (decimal)posEfectiva.Latitud : null,
+                LongitudExif = posEfectiva is not null ? (decimal)posEfectiva.Longitud : null,
                 SyncStatus = SyncStatusValues.PendingCreate
             };
             var fotoId = await _localDb.InsertFotoAsync(foto);

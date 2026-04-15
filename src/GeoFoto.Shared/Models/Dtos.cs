@@ -30,4 +30,7 @@ public record SyncOperationResultDto(int LocalId, bool Success,
 
 public record BatchResultDto(IReadOnlyList<SyncOperationResultDto> Results);
 
-public record SyncDeltaDto(IReadOnlyList<PuntoDto> Puntos, IReadOnlyList<FotoDto> Fotos);
+public record SyncDeltaDto(IReadOnlyList<PuntoDto> Puntos, IReadOnlyList<FotoDto> Fotos,
+    IReadOnlyList<DeletedEntityDto>? Eliminados = null);
+
+public record DeletedEntityDto(string EntityType, int EntityId);

@@ -65,4 +65,11 @@ public class FotosController : ControllerBase
 
         return PhysicalFile(path, contentType);
     }
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(int id, CancellationToken ct)
+    {
+        var ok = await _svc.DeleteFotoAsync(id, ct);
+        return ok ? NoContent() : NotFound();
+    }
 }

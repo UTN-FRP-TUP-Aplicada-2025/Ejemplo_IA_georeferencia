@@ -3,6 +3,7 @@
 @inject IServiceProvider SP
 @inject ISnackbar Snackbar
 @inject IJSRuntime JS
+@inject IDialogService Dialog
 
 <MudDialog>
     <TitleContent>
@@ -25,10 +26,12 @@
         {
             @if (_fotos.Any())
             {
+                <div style="cursor:pointer;" @onclick="AbrirGaleriaLocalAsync">
                 <MudImage Src="@_fotos[_indiceFoto].DataUrl"
                           Alt="@_fotos[_indiceFoto].NombreArchivo"
                           ObjectFit="ObjectFit.Cover"
                           Style="width:100%;height:220px;border-radius:8px;" />
+                </div>
 
                 <div style="display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;">
                     @foreach (var (foto, i) in _fotos.Select((f, i) => (f, i)))
@@ -316,6 +319,38 @@
     {
         if (_punto is not null)
             await JS.InvokeVoidAsync("leafletInterop.centerOn", (double)_punto.Latitud, (double)_punto.Longitud);
+    }
+
+    private async Task AbrirGaleriaLocalAsync()
+    {
+        if (_fotos.Count == 0) return;
+
+        var galeriaFotos = _fotos.Select(f => new GaleriaLocalDialog.FotoView(
+            f.LocalId, f.NombreArchivo, f.DataUrl, f.FechaTomada, f.Latitud, f.Longitud)).ToList();
+
+        var params_ = new DialogParameters<GaleriaLocalDialog>
+        {
+            { x => x.Fotos, galeriaFotos },
+            { x => x.NombrePunto, _nombre ?? $"Punto #{PuntoLocalId}" },
+            { x => x.IndiceInicial, _indiceFoto },
+            { x => x.OnFotoEliminada, EventCallback.Factory.Create<int>(this, async (localId) =>
+            {
+                await CargarPuntoAsync();
+                StateHasChanged();
+            }) }
+        };
+        var opts = new DialogOptions
+        {
+            MaxWidth = MaxWidth.Large,
+            FullWidth = true,
+            CloseOnEscapeKey = true,
+            CloseButton = true
+        };
+        var dialog = await Dialog.ShowAsync<GaleriaLocalDialog>("", params_, opts);
+        var result = await dialog.Result;
+        // Reload in case fotos changed inside the gallery
+        await CargarPuntoAsync();
+        StateHasChanged();
     }
 
     private void Cancel() => MudDialog.Cancel();

@@ -17,7 +17,10 @@ public interface ILocalDbService
 
     // Fotos
     Task<List<LocalFoto>> GetFotosByPuntoAsync(int puntoLocalId);
+    Task<LocalFoto?> GetFotoAsync(int localId);
+    Task<LocalFoto?> GetFotoByRemoteIdAsync(int remoteId);
     Task<int> InsertFotoAsync(LocalFoto foto);
+    Task UpdateFotoAsync(LocalFoto foto);
     Task DeleteFotoAsync(int localId);
 
     // SyncQueue

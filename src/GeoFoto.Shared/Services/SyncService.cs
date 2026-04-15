@@ -94,7 +94,92 @@ public class SyncService : ISyncService
         if (pendientes.Count == 0)
             return (successful, failed, errors);
 
-        var batches = pendientes.Chunk(50);
+        // Order: Create Punto (0) → Create Foto (1) → Update (2) → Delete Foto (3) → Delete Punto (4)
+        static int Priority(SyncQueueItem op) => op switch
+        {
+            { OperationType: "Create", EntityType: "Punto" } => 0,
+            { OperationType: "Create", EntityType: "Foto" } => 1,
+            { OperationType: "Update" } => 2,
+            { OperationType: "Delete", EntityType: "Foto" } => 3,
+            { OperationType: "Delete", EntityType: "Punto" } => 4,
+            _ => 99
+        };
+
+        pendientes = [.. pendientes.OrderBy(Priority)];
+
+        // Separate foto creates — they require direct file upload, not batch
+        var fotoCreates = pendientes.Where(p => p is { OperationType: "Create", EntityType: "Foto" }).ToList();
+        var batched = pendientes.Except(fotoCreates).ToList();
+
+        // Push foto creates individually (direct upload)
+        foreach (var op in fotoCreates)
+        {
+            try
+            {
+                var payload = JsonSerializer.Deserialize<FotoSyncPayload>(op.Payload,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (payload is null)
+                {
+                    await _localDb.MarkFailedAsync(op.Id, "Payload inválido");
+                    failed++;
+                    continue;
+                }
+
+                // Get the punto's RemoteId
+                var localPunto = await _localDb.GetPuntoAsync(payload.PuntoLocalId);
+                if (localPunto?.RemoteId is null)
+                {
+                    // Punto not yet pushed — skip this foto for now
+                    continue;
+                }
+
+                if (!File.Exists(payload.RutaLocal))
+                {
+                    await _localDb.MarkFailedAsync(op.Id, "Archivo de foto no encontrado");
+                    failed++;
+                    continue;
+                }
+
+                await using var stream = File.OpenRead(payload.RutaLocal);
+                var ext = Path.GetExtension(payload.NombreArchivo).ToLowerInvariant();
+                var mime = ext == ".png" ? "image/png" : "image/jpeg";
+
+                await _api.AgregarFotoAPuntoAsync(
+                    localPunto.RemoteId.Value, stream, payload.NombreArchivo, mime, ct);
+
+                await _localDb.MarkDoneAsync(op.Id);
+
+                // Update local foto RemoteId (we don't get it back from this endpoint, mark synced)
+                var localFoto = await _localDb.GetFotoAsync(op.LocalId);
+                if (localFoto is not null)
+                {
+                    localFoto.SyncStatus = SyncStatusValues.Synced;
+                    await _localDb.UpdateFotoAsync(localFoto);
+                }
+
+                successful++;
+            }
+            catch (HttpRequestException)
+            {
+                _logger.LogWarning("Sin red durante push de foto — dejando pendiente");
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al pushear foto {LocalId}", op.LocalId);
+                await _localDb.IncrementAttemptsAsync(op.Id);
+                if (op.Attempts + 1 >= 3)
+                {
+                    await _localDb.MarkFailedAsync(op.Id, ex.Message);
+                    failed++;
+                    errors.Add(ex.Message);
+                }
+            }
+        }
+
+        // Push non-foto-create operations via batch
+        var batches = batched.Chunk(50);
         foreach (var batch in batches)
         {
             var operations = batch.Select(op => new SyncOperationDto(
@@ -111,7 +196,6 @@ public class SyncService : ISyncService
                     {
                         await _localDb.MarkDoneAsync(item.Id, r.RemoteId);
 
-                        // Update local entity's RemoteId if provided
                         if (r.RemoteId.HasValue && item.EntityType == "Punto")
                         {
                             var punto = await _localDb.GetPuntoAsync(item.LocalId);
@@ -149,6 +233,8 @@ public class SyncService : ISyncService
         return (successful, failed, errors);
     }
 
+    private record FotoSyncPayload(int PuntoLocalId, string NombreArchivo, string RutaLocal);
+
     private async Task PullAsync(CancellationToken ct)
     {
         try
@@ -157,13 +243,33 @@ public class SyncService : ISyncService
             var delta = await _api.GetSyncDeltaAsync(
                 string.IsNullOrEmpty(lastSync) ? null : lastSync, ct);
 
+            // Process deleted entities first
+            if (delta.Eliminados is { Count: > 0 })
+            {
+                foreach (var eliminado in delta.Eliminados)
+                {
+                    if (eliminado.EntityType == "Foto")
+                    {
+                        var localFoto = await _localDb.GetFotoByRemoteIdAsync(eliminado.EntityId);
+                        if (localFoto is not null)
+                            await _localDb.DeleteFotoAsync(localFoto.LocalId);
+                    }
+                    else if (eliminado.EntityType == "Punto")
+                    {
+                        var localPunto = await _localDb.FindByRemoteIdAsync(eliminado.EntityId);
+                        if (localPunto is not null)
+                            await _localDb.DeletePuntoAsync(localPunto.LocalId);
+                    }
+                }
+            }
+
+            // Process puntos
             foreach (var remotePunto in delta.Puntos)
             {
                 var local = await _localDb.FindByRemoteIdAsync(remotePunto.Id);
 
                 if (local is null)
                 {
-                    // New punto from server
                     var newLocal = new LocalPunto
                     {
                         RemoteId = remotePunto.Id,
@@ -177,20 +283,38 @@ public class SyncService : ISyncService
                     };
                     await _localDb.InsertPuntoAsync(newLocal);
                 }
-                else
+                else if (local.SyncStatus == SyncStatusValues.Synced ||
+                         local.SyncStatus == SyncStatusValues.Local)
                 {
-                    // Last-Write-Wins: server version wins if local is synced
-                    if (local.SyncStatus == SyncStatusValues.Synced ||
-                        local.SyncStatus == SyncStatusValues.Local)
+                    local.Nombre = remotePunto.Nombre;
+                    local.Descripcion = remotePunto.Descripcion;
+                    local.Latitud = remotePunto.Latitud;
+                    local.Longitud = remotePunto.Longitud;
+                    local.SyncStatus = SyncStatusValues.Synced;
+                    await _localDb.UpdatePuntoAsync(local);
+                }
+            }
+
+            // Process fotos
+            foreach (var remoteFoto in delta.Fotos)
+            {
+                var localFoto = await _localDb.GetFotoByRemoteIdAsync(remoteFoto.Id);
+                if (localFoto is null)
+                {
+                    // Find the local punto that corresponds to this foto's punto
+                    var localPunto = await _localDb.FindByRemoteIdAsync(remoteFoto.PuntoId);
+                    if (localPunto is null) continue;
+
+                    var nueva = new LocalFoto
                     {
-                        local.Nombre = remotePunto.Nombre;
-                        local.Descripcion = remotePunto.Descripcion;
-                        local.Latitud = remotePunto.Latitud;
-                        local.Longitud = remotePunto.Longitud;
-                        local.SyncStatus = SyncStatusValues.Synced;
-                        await _localDb.UpdatePuntoAsync(local);
-                    }
-                    // If local has pending changes, keep local version (will push next sync)
+                        RemoteId = remoteFoto.Id,
+                        PuntoLocalId = localPunto.LocalId,
+                        NombreArchivo = remoteFoto.NombreArchivo,
+                        RutaLocal = string.Empty, // No local file — only available via URL
+                        FechaTomada = remoteFoto.FechaTomada?.ToString("O"),
+                        SyncStatus = SyncStatusValues.Synced
+                    };
+                    await _localDb.InsertFotoAsync(nueva);
                 }
             }
 

@@ -28,6 +28,7 @@ public static class MauiProgram
 		});
 
 		builder.Services.AddScoped<ICamaraService, CamaraService>();
+		builder.Services.AddScoped<IShareService, MauiShareService>();
 		builder.Services.AddScoped<IUbicacionService, MauiUbicacionService>();
 		builder.Services.AddScoped<IPermissionService, PermissionService>();
 		builder.Services.AddSingleton<IAppConfigService, MauiAppConfigService>();

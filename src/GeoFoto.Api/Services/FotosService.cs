@@ -11,6 +11,7 @@ public interface IFotosService
     Task<FotoDto> UploadToPuntoAsync(int puntoId, IFormFile file, CancellationToken ct = default);
     Task<IReadOnlyList<FotoDto>> GetByPuntoIdAsync(int puntoId, CancellationToken ct = default);
     Task<Foto?> GetFotoAsync(int id, CancellationToken ct = default);
+    Task<bool> DeleteFotoAsync(int id, CancellationToken ct = default);
 }
 
 public class FotosService : IFotosService
@@ -122,5 +123,25 @@ public class FotosService : IFotosService
     public async Task<Foto?> GetFotoAsync(int id, CancellationToken ct = default)
     {
         return await _db.Fotos.FindAsync([id], ct);
+    }
+
+    public async Task<bool> DeleteFotoAsync(int id, CancellationToken ct = default)
+    {
+        var foto = await _db.Fotos.FindAsync([id], ct);
+        if (foto is null) return false;
+
+        _storage.Delete(foto.RutaFisica);
+        _db.Fotos.Remove(foto);
+
+        // Registrar la eliminación para que el delta la informe a clientes
+        _db.DeletedEntities.Add(new DeletedEntity
+        {
+            EntityType = "Foto",
+            EntityId = id,
+            DeletedAt = DateTime.UtcNow
+        });
+
+        await _db.SaveChangesAsync(ct);
+        return true;
     }
 }

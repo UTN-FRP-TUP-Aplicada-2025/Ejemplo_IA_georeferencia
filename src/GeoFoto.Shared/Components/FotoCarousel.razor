@@ -87,6 +87,8 @@
 @code {
     [Parameter] public List<FotoDto> Fotos { get; set; } = new();
     [Parameter] public string NombrePunto { get; set; } = "";
+    [Parameter] public int PuntoId { get; set; }
+    [Parameter] public EventCallback OnFotosChanged { get; set; }
     [Inject] private IGeoFotoApiClient Api { get; set; } = default!;
     [Inject] private IDialogService Dialog { get; set; } = default!;
 
@@ -98,7 +100,9 @@
         {
             { x => x.Fotos, Fotos },
             { x => x.NombrePunto, NombrePunto },
-            { x => x.IndiceInicial, _indice }
+            { x => x.IndiceInicial, _indice },
+            { x => x.PuntoId, PuntoId },
+            { x => x.OnFotosChanged, OnFotosChanged }
         };
         var opts = new DialogOptions
         {

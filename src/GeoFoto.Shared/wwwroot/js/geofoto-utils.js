@@ -37,6 +37,22 @@ window.geoFotoUtils = {
                 { enableHighAccuracy: true, timeout: 10000, maximumAge: 300000 }
             );
         });
+    },
+
+    // Descargar un archivo desde una URL como descarga del navegador
+    downloadFile: function (url, fileName) {
+        fetch(url)
+            .then(function (resp) { return resp.blob(); })
+            .then(function (blob) {
+                var blobUrl = URL.createObjectURL(blob);
+                var a = document.createElement('a');
+                a.href = blobUrl;
+                a.download = fileName || 'foto.jpg';
+                document.body.appendChild(a);
+                a.click();
+                document.body.removeChild(a);
+                URL.revokeObjectURL(blobUrl);
+            });
     }
 };
 

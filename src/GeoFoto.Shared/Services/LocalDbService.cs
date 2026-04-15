@@ -101,6 +101,26 @@ public class LocalDbService : ILocalDbService
         return foto.LocalId;
     }
 
+    public async Task<LocalFoto?> GetFotoAsync(int localId)
+    {
+        await EnsureInitializedAsync();
+        return await _db!.Table<LocalFoto>()
+            .FirstOrDefaultAsync(f => f.LocalId == localId);
+    }
+
+    public async Task<LocalFoto?> GetFotoByRemoteIdAsync(int remoteId)
+    {
+        await EnsureInitializedAsync();
+        return await _db!.Table<LocalFoto>()
+            .FirstOrDefaultAsync(f => f.RemoteId == remoteId);
+    }
+
+    public async Task UpdateFotoAsync(LocalFoto foto)
+    {
+        await EnsureInitializedAsync();
+        await _db!.UpdateAsync(foto);
+    }
+
     public async Task DeleteFotoAsync(int localId)
     {
         await EnsureInitializedAsync();

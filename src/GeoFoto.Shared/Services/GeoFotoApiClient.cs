@@ -13,6 +13,8 @@ public interface IGeoFotoApiClient
     Task<List<FotoDto>> GetFotosByPuntoAsync(int puntoId);
     string GetFotoUrl(int fotoId);
     Task AgregarFotoAPuntoAsync(int puntoId, Stream stream, string nombre, string tipo, CancellationToken ct = default);
+    Task<bool> DeleteFotoAsync(int fotoId, CancellationToken ct = default);
+    Task<Stream?> DescargarImagenAsync(int fotoId, CancellationToken ct = default);
     Task<SyncDeltaDto> GetSyncDeltaAsync(string? since, CancellationToken ct = default);
     Task<BatchResultDto> SyncBatchAsync(IReadOnlyList<SyncOperationDto> operations, CancellationToken ct = default);
 }
@@ -124,6 +126,33 @@ public class GeoFotoApiClient : IGeoFotoApiClient
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             throw new GeoFotoApiException($"Error al agregar foto al punto {puntoId}", ex);
+        }
+    }
+
+    public async Task<bool> DeleteFotoAsync(int fotoId, CancellationToken ct = default)
+    {
+        try
+        {
+            var resp = await _http.DeleteAsync($"api/fotos/{fotoId}", ct);
+            return resp.IsSuccessStatusCode;
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            throw new GeoFotoApiException($"Error al eliminar foto {fotoId}", ex);
+        }
+    }
+
+    public async Task<Stream?> DescargarImagenAsync(int fotoId, CancellationToken ct = default)
+    {
+        try
+        {
+            var resp = await _http.GetAsync($"api/fotos/imagen/{fotoId}", ct);
+            if (!resp.IsSuccessStatusCode) return null;
+            return await resp.Content.ReadAsStreamAsync(ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            throw new GeoFotoApiException($"Error al descargar imagen {fotoId}", ex);
         }
     }
 

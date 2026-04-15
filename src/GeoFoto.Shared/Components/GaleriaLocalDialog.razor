@@ -1,0 +1,226 @@
+@using GeoFoto.Shared.Models
+@using GeoFoto.Shared.Services
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceProvider SP
+@inject ISnackbar Snackbar
+
+<MudDialog>
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Justify="Justify.SpaceBetween">
+            <MudText Typo="Typo.h6">
+                @(string.IsNullOrEmpty(NombrePunto) ? "Fotos" : NombrePunto)
+            </MudText>
+            @if (_fotos.Count > 0)
+            {
+                <MudText Typo="Typo.body2" Color="Color.Secondary">
+                    @(_indice + 1) de @_fotos.Count
+                </MudText>
+            }
+        </MudStack>
+    </TitleContent>
+    <DialogContent>
+        @if (_fotos.Count == 0)
+        {
+            <MudAlert Severity="Severity.Info">Sin fotos</MudAlert>
+        }
+        else
+        {
+            <div style="position:relative; min-height:260px;">
+                <MudImage Src="@_fotos[_indice].DataUrl"
+                          Alt="@_fotos[_indice].NombreArchivo"
+                          ObjectFit="ObjectFit.Contain"
+                          Style="width:100%; max-height:60vh;" />
+
+                @* Flechas *@
+                @if (_indice > 0)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft"
+                                   Style="position:absolute;left:4px;top:50%;transform:translateY(-50%);
+                                          background:rgba(0,0,0,.45);color:white;border-radius:50%;"
+                                   OnClick="() => _indice--" />
+                }
+                @if (_indice < _fotos.Count - 1)
+                {
+                    <MudIconButton Icon="@Icons.Material.Filled.ChevronRight"
+                                   Style="position:absolute;right:4px;top:50%;transform:translateY(-50%);
+                                          background:rgba(0,0,0,.45);color:white;border-radius:50%;"
+                                   OnClick="() => _indice++" />
+                }
+            </div>
+
+            @* Metadata *@
+            <MudStack Row="true" Wrap="Wrap.Wrap" Class="mt-2 px-1" Spacing="1">
+                @if (!string.IsNullOrEmpty(_fotos[_indice].FechaTomada))
+                {
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.Schedule">
+                        @_fotos[_indice].FechaTomada
+                    </MudChip>
+                }
+                @if (_fotos[_indice].Latitud.HasValue)
+                {
+                    <MudChip T="string" Size="Size.Small" Icon="@Icons.Material.Filled.LocationOn" Color="Color.Primary">
+                        @_fotos[_indice].Latitud!.Value.ToString("F5")°,
+                        @_fotos[_indice].Longitud!.Value.ToString("F5")°
+                    </MudChip>
+                }
+            </MudStack>
+
+            @* Tira de miniaturas *@
+            @if (_fotos.Count > 1)
+            {
+                <div style="display:flex;gap:6px;overflow-x:auto;padding:10px 4px 2px;scrollbar-width:thin;">
+                    @foreach (var (f, i) in _fotos.Select((f, i) => (f, i)))
+                    {
+                        var idx = i;
+                        <div style="flex-shrink:0;width:52px;height:52px;border-radius:6px;overflow:hidden;cursor:pointer;
+                                    border:2px solid @(idx == _indice ? "var(--mud-palette-primary)" : "transparent");"
+                             @onclick="() => _indice = idx">
+                            <MudImage Src="@f.DataUrl" ObjectFit="ObjectFit.Cover" Style="width:100%;height:100%;" />
+                        </div>
+                    }
+                </div>
+            }
+
+            @* Acciones *@
+            <MudStack Row="true" Spacing="1" Class="mt-3" Justify="Justify.Center">
+                @if (_shareService is not null)
+                {
+                    <MudTooltip Text="Compartir">
+                        <MudIconButton Icon="@Icons.Material.Filled.Share"
+                                       Color="Color.Primary"
+                                       Disabled="_procesando"
+                                       OnClick="CompartirAsync" />
+                    </MudTooltip>
+                }
+
+                <MudTooltip Text="Agregar foto">
+                    <MudIconButton Icon="@Icons.Material.Filled.AddPhotoAlternate"
+                                   Color="Color.Secondary"
+                                   Disabled="_procesando"
+                                   OnClick="AgregarFotoAsync" />
+                </MudTooltip>
+
+                <MudTooltip Text="Eliminar foto">
+                    <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                                   Color="Color.Error"
+                                   Disabled="_procesando"
+                                   OnClick="EliminarFotoAsync" />
+                </MudTooltip>
+            </MudStack>
+
+            @if (_procesando)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-2" />
+            }
+        }
+    </DialogContent>
+    <DialogActions>
+        <MudButton OnClick="Cerrar">Cerrar</MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    // FotoView is the same record type used by DetallePuntoLocal — passed in as object to avoid sharing type
+    public sealed record FotoView(
+        int LocalId,
+        string NombreArchivo,
+        string DataUrl,
+        string? FechaTomada,
+        decimal? Latitud,
+        decimal? Longitud);
+
+    [CascadingParameter] IMudDialogInstance MudDialog { get; set; } = null!;
+    [Parameter] public List<FotoView> Fotos { get; set; } = new();
+    [Parameter] public string NombrePunto { get; set; } = "";
+    [Parameter] public int IndiceInicial { get; set; } = 0;
+    [Parameter] public EventCallback OnAgregarFoto { get; set; }
+    [Parameter] public EventCallback<int> OnFotoEliminada { get; set; }
+
+    private List<FotoView> _fotos = new();
+    private int _indice;
+    private bool _procesando;
+    private IShareService? _shareService;
+    private ILocalDbService? _localDb;
+
+    protected override void OnInitialized()
+    {
+        _fotos = new List<FotoView>(Fotos);
+        _indice = Math.Min(IndiceInicial, Math.Max(_fotos.Count - 1, 0));
+        _shareService = SP.GetService<IShareService>();
+        _localDb = SP.GetService<ILocalDbService>();
+    }
+
+    private async Task CompartirAsync()
+    {
+        if (_shareService is null || _fotos.Count == 0) return;
+        var foto = _fotos[_indice];
+
+        // Extract file path from DataUrl isn't possible — we need the local file path
+        // The DataUrl was loaded from disk; reconstruct path via LocalDb
+        if (_localDb is null) return;
+        _procesando = true;
+        try
+        {
+            var localFoto = await _localDb.GetFotoAsync(foto.LocalId);
+            if (localFoto is not null && File.Exists(localFoto.RutaLocal))
+                await _shareService.ShareFileAsync(foto.NombreArchivo, localFoto.RutaLocal);
+            else
+                Snackbar.Add("Archivo no disponible para compartir", Severity.Warning);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al compartir: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _procesando = false;
+        }
+    }
+
+    private async Task AgregarFotoAsync()
+    {
+        _procesando = true;
+        try
+        {
+            await OnAgregarFoto.InvokeAsync();
+        }
+        finally
+        {
+            _procesando = false;
+        }
+        MudDialog.Close(DialogResult.Ok("agregar"));
+    }
+
+    private async Task EliminarFotoAsync()
+    {
+        if (_fotos.Count == 0 || _localDb is null) return;
+        var foto = _fotos[_indice];
+        _procesando = true;
+        try
+        {
+            await _localDb.DeleteFotoAsync(foto.LocalId);
+            await OnFotoEliminada.InvokeAsync(foto.LocalId);
+            _fotos.RemoveAt(_indice);
+            if (_indice >= _fotos.Count)
+                _indice = _fotos.Count == 0 ? 0 : _fotos.Count - 1;
+
+            if (_fotos.Count == 0)
+            {
+                Snackbar.Add("Foto eliminada", Severity.Success);
+                MudDialog.Close(DialogResult.Ok("eliminar"));
+                return;
+            }
+            Snackbar.Add("Foto eliminada", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al eliminar: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _procesando = false;
+        }
+    }
+
+    private void Cerrar() => MudDialog.Close(DialogResult.Ok(_indice));
+}

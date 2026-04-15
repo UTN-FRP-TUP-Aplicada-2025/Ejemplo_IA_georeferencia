@@ -9,6 +9,7 @@ public class GeoFotoDbContext : DbContext
 
     public DbSet<Punto> Puntos => Set<Punto>();
     public DbSet<Foto> Fotos => Set<Foto>();
+    public DbSet<DeletedEntity> DeletedEntities => Set<DeletedEntity>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -81,6 +82,14 @@ public class GeoFotoDbContext : DbContext
 
             builder.HasIndex(f => f.UpdatedAt)
                    .HasDatabaseName("IX_Fotos_UpdatedAt");
+        });
+
+        modelBuilder.Entity<DeletedEntity>(builder =>
+        {
+            builder.ToTable("DeletedEntities");
+            builder.HasKey(d => d.Id);
+            builder.Property(d => d.EntityType).HasMaxLength(50).IsRequired();
+            builder.HasIndex(d => d.DeletedAt).HasDatabaseName("IX_DeletedEntities_DeletedAt");
         });
     }
 }

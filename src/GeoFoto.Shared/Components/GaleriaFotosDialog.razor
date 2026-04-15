@@ -1,6 +1,8 @@
 @using GeoFoto.Shared.Models
 @using GeoFoto.Shared.Services
 @inject IGeoFotoApiClient Api
+@inject IJSRuntime JS
+@inject ISnackbar Snackbar
 
 <MudDialog>
     <TitleContent>
@@ -82,6 +84,41 @@
         }
     </DialogContent>
     <DialogActions>
+        @* Acciones de foto *@
+        <MudTooltip Text="Descargar">
+            <MudIconButton Icon="@Icons.Material.Filled.Download"
+                           Disabled="_procesando"
+                           OnClick="DescargarAsync" />
+        </MudTooltip>
+
+        <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                       FilesChanged="OnAgregarArchivos"
+                       Accept=".jpg,.jpeg,.png,.webp"
+                       MaximumFileCount="10"
+                       Disabled="_procesando">
+            <ChildContent>
+                <MudTooltip Text="Agregar fotos">
+                    <MudIconButton HtmlTag="label"
+                                   Icon="@Icons.Material.Filled.AddPhotoAlternate"
+                                   Color="Color.Secondary"
+                                   Disabled="_procesando" />
+                </MudTooltip>
+            </ChildContent>
+        </MudFileUpload>
+
+        <MudTooltip Text="Eliminar foto">
+            <MudIconButton Icon="@Icons.Material.Filled.Delete"
+                           Color="Color.Error"
+                           Disabled="_procesando"
+                           OnClick="EliminarAsync" />
+        </MudTooltip>
+
+        @if (_procesando)
+        {
+            <MudProgressCircular Size="Size.Small" Indeterminate="true" Class="mx-2" />
+        }
+
+        <MudSpacer />
         <MudButton OnClick="Cerrar" Variant="Variant.Text">Cerrar</MudButton>
     </DialogActions>
 </MudDialog>
@@ -91,10 +128,86 @@
     [Parameter] public List<FotoDto> Fotos { get; set; } = new();
     [Parameter] public string NombrePunto { get; set; } = "";
     [Parameter] public int IndiceInicial { get; set; } = 0;
+    [Parameter] public int PuntoId { get; set; }
+    [Parameter] public EventCallback OnFotosChanged { get; set; }
 
     private int _indice;
+    private bool _procesando;
 
     protected override void OnInitialized() => _indice = IndiceInicial;
+
+    private async Task DescargarAsync()
+    {
+        if (Fotos.Count == 0) return;
+        var foto = Fotos[_indice];
+        await JS.InvokeVoidAsync("geoFotoUtils.downloadFile",
+            Api.GetFotoUrl(foto.Id), foto.NombreArchivo);
+    }
+
+    private async Task OnAgregarArchivos(IReadOnlyList<IBrowserFile> archivos)
+    {
+        if (archivos is null || archivos.Count == 0 || PuntoId == 0) return;
+        _procesando = true;
+        try
+        {
+            foreach (var archivo in archivos)
+            {
+                await using var stream = archivo.OpenReadStream(maxAllowedSize: 20 * 1024 * 1024);
+                await Api.AgregarFotoAPuntoAsync(
+                    PuntoId, stream, archivo.Name,
+                    string.IsNullOrEmpty(archivo.ContentType) ? "image/jpeg" : archivo.ContentType);
+            }
+            // Reload fotos list
+            var actualizadas = await Api.GetFotosByPuntoAsync(PuntoId);
+            Fotos = actualizadas;
+            if (_indice >= Fotos.Count) _indice = Math.Max(Fotos.Count - 1, 0);
+            await OnFotosChanged.InvokeAsync();
+            Snackbar.Add($"{archivos.Count} foto(s) agregada(s)", Severity.Success);
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al agregar: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _procesando = false;
+        }
+    }
+
+    private async Task EliminarAsync()
+    {
+        if (Fotos.Count == 0) return;
+        var foto = Fotos[_indice];
+        _procesando = true;
+        try
+        {
+            var ok = await Api.DeleteFotoAsync(foto.Id);
+            if (ok)
+            {
+                Fotos.RemoveAt(_indice);
+                if (_indice >= Fotos.Count) _indice = Math.Max(Fotos.Count - 1, 0);
+                await OnFotosChanged.InvokeAsync();
+                Snackbar.Add("Foto eliminada", Severity.Success);
+                if (Fotos.Count == 0)
+                {
+                    MudDialog.Close(DialogResult.Ok("eliminar"));
+                    return;
+                }
+            }
+            else
+            {
+                Snackbar.Add("No se pudo eliminar la foto", Severity.Error);
+            }
+        }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al eliminar: {ex.Message}", Severity.Error);
+        }
+        finally
+        {
+            _procesando = false;
+        }
+    }
 
     private void Cerrar() => MudDialog.Close(DialogResult.Ok(_indice));
 }
