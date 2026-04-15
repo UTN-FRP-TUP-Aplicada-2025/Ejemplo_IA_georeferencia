@@ -23,19 +23,6 @@
     <script src="_content/GeoFoto.Shared/lib/leaflet.markercluster/leaflet.markercluster.js"></script>
     <script src="_content/GeoFoto.Shared/js/leaflet-interop.js"></script>
     <script src="_framework/blazor.webview.js" autostart="false"></script>
-    <script>
-        function startBlazor() {
-            if (window.external && typeof window.external.receiveMessage === 'function') {
-                if (!window.__blazorStarted) {
-                    window.__blazorStarted = true;
-                    Blazor.start().catch(function() {});
-                }
-            } else {
-                setTimeout(startBlazor, 50);
-            }
-        }
-        startBlazor();
-    </script>
 
 </body>
 

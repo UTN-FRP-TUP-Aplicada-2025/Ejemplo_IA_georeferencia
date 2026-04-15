@@ -549,130 +549,170 @@ else
     {
         if (_camaraService is null || _localDb is null) return;
 
-        var stream = await _camaraService.TomarFotoAsync();
+        // Abrir la cámara — error aquí significa que el sistema no pudo lanzarla
+        Stream? stream;
+        try
+        {
+            stream = await _camaraService.TomarFotoAsync();
+        }
+        catch (Exception ex)
+        {
+            System.Diagnostics.Debug.WriteLine($"[GeoFoto] ERROR al abrir cámara: {ex}");
+            await InvokeAsync(() => Snackbar.Add($"Error al abrir la cámara: {ex.Message}", Severity.Error));
+            return;
+        }
+
         if (stream is null) return; // usuario canceló
 
-        // Leer los bytes INMEDIATAMENTE: el archivo temporal de la cámara puede eliminarse
-        // antes de que los awaits posteriores (GPS, DB) terminen en Android.
-        byte[] fotoBytes;
-        using (var streamMs = new MemoryStream())
+        // Todo el procesamiento post-captura está protegido: cualquier excepción
+        // se muestra como snackbar en lugar de desaparecer silenciosamente.
+        try
         {
-            await stream.CopyToAsync(streamMs);
-            fotoBytes = streamMs.ToArray();
-        }
-
-        // Re-sincronizar el dispatcher de Blazor tras volver de la actividad de cámara.
-        // Sin esto, DialogService.ShowAsync puede no renderizar el diálogo correctamente.
-        await InvokeAsync(StateHasChanged);
-
-        // Forzar repintado del mapa: el WebView puede quedar en blanco al volver de cámara
-        if (_mapaListo)
-            await JS.InvokeVoidAsync("leafletInterop.invalidateSize");
-
-        // Obtener posición GPS actual
-        UbicacionResult? pos = null;
-        if (_ubicacionService is not null)
-        {
-            var r = await _ubicacionService.ObtenerUbicacionAsync();
-            if (r.Ok) pos = r;
-        }
-
-        await _localDb.InitializeAsync();
-        var puntos = await _localDb.GetPuntosAsync();
-
-        // Determinar a qué punto asociar la foto
-        LocalPunto? marcador = null;
-        if (_marcadorActivoId.HasValue)
-        {
-            marcador = await _localDb.GetPuntoAsync(_marcadorActivoId.Value);
-        }
-        else if (pos is not null && _radioService is not null)
-        {
-            var activos = puntos.Where(p => p.SyncStatus != SyncStatusValues.PendingDelete);
-            marcador = _radioService.BuscarMarkerDentroDeRadio(activos, pos.Latitud, pos.Longitud);
-        }
-
-        int puntoLocalId;
-        bool esPrimeraFoto;
-
-        if (marcador is not null)
-        {
-            puntoLocalId = marcador.LocalId;
-            var fotosExistentes = await _localDb.GetFotosByPuntoAsync(puntoLocalId);
-            esPrimeraFoto = !fotosExistentes.Any(f => f.SyncStatus != SyncStatusValues.PendingDelete);
-        }
-        else
-        {
-            // Crear nuevo punto en la posición actual
-            var lat = pos is not null ? (decimal)pos.Latitud : 0m;
-            var lng = pos is not null ? (decimal)pos.Longitud : 0m;
-            var nuevoPunto = new LocalPunto
+            // Leer los bytes INMEDIATAMENTE: el archivo temporal de la cámara puede eliminarse
+            // antes de que los awaits posteriores (GPS, DB) terminen en Android.
+            byte[] fotoBytes;
+            await using (stream)
             {
-                Latitud = lat, Longitud = lng,
+                using var streamMs = new MemoryStream();
+                await stream.CopyToAsync(streamMs);
+                fotoBytes = streamMs.ToArray();
+            }
+
+            // Re-sincronizar el dispatcher de Blazor tras volver de la actividad de cámara.
+            // Sin esto, DialogService.ShowAsync puede no renderizar el diálogo correctamente.
+            // El delay de 250ms da tiempo al WebView de Android para reanudar su hilo JS
+            // tras volver a primer plano (evita blank screen post-cámara).
+            await Task.Delay(250);
+            await InvokeAsync(StateHasChanged);
+
+            // Forzar repintado del mapa: el WebView puede quedar en blanco al volver de cámara
+            if (_mapaListo)
+                await JS.InvokeVoidAsync("leafletInterop.invalidateSize");
+
+            // Obtener posición GPS actual
+            UbicacionResult? pos = null;
+            if (_ubicacionService is not null)
+            {
+                var r = await _ubicacionService.ObtenerUbicacionAsync();
+                if (r.Ok) pos = r;
+            }
+
+            await _localDb.InitializeAsync();
+            var puntos = await _localDb.GetPuntosAsync();
+
+            // Determinar a qué punto asociar la foto
+            LocalPunto? marcador = null;
+            if (_marcadorActivoId.HasValue)
+            {
+                marcador = await _localDb.GetPuntoAsync(_marcadorActivoId.Value);
+            }
+            else if (pos is not null && _radioService is not null)
+            {
+                var activos = puntos.Where(p => p.SyncStatus != SyncStatusValues.PendingDelete);
+                marcador = _radioService.BuscarMarkerDentroDeRadio(activos, pos.Latitud, pos.Longitud);
+            }
+
+            int puntoLocalId;
+            bool esPrimeraFoto;
+
+            if (marcador is not null)
+            {
+                puntoLocalId = marcador.LocalId;
+                var fotosExistentes = await _localDb.GetFotosByPuntoAsync(puntoLocalId);
+                esPrimeraFoto = !fotosExistentes.Any(f => f.SyncStatus != SyncStatusValues.PendingDelete);
+            }
+            else
+            {
+                // Crear nuevo punto en la posición actual
+                var lat = pos is not null ? (decimal)pos.Latitud : 0m;
+                var lng = pos is not null ? (decimal)pos.Longitud : 0m;
+                var nuevoPunto = new LocalPunto
+                {
+                    Latitud = lat, Longitud = lng,
+                    SyncStatus = SyncStatusValues.PendingCreate
+                };
+                puntoLocalId = await _localDb.InsertPuntoAsync(nuevoPunto);
+                await _localDb.EnqueueAsync("Create", "Punto", puntoLocalId,
+                    System.Text.Json.JsonSerializer.Serialize(nuevoPunto));
+                nuevoPunto.LocalId = puntoLocalId;
+                marcador = nuevoPunto;
+                esPrimeraFoto = true;
+            }
+
+            System.Diagnostics.Debug.WriteLine($"[GeoFoto] PuntoLocal creado/actualizado: id={puntoLocalId}");
+
+            // Guardar la foto en disco
+            var photosDir = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
+                "photos");
+            Directory.CreateDirectory(photosDir);
+            var localPath = Path.Combine(photosDir, $"{Guid.NewGuid()}.jpg");
+            await File.WriteAllBytesAsync(localPath, fotoBytes);
+
+            System.Diagnostics.Debug.WriteLine($"[GeoFoto] FotoLocal creada: {localPath} ({fotoBytes.Length} bytes)");
+
+            var foto = new LocalFoto
+            {
+                PuntoLocalId = puntoLocalId,
+                NombreArchivo = Path.GetFileName(localPath),
+                RutaLocal = localPath,
+                LatitudExif = pos is not null ? (decimal)pos.Latitud : null,
+                LongitudExif = pos is not null ? (decimal)pos.Longitud : null,
                 SyncStatus = SyncStatusValues.PendingCreate
             };
-            puntoLocalId = await _localDb.InsertPuntoAsync(nuevoPunto);
-            await _localDb.EnqueueAsync("Create", "Punto", puntoLocalId,
-                System.Text.Json.JsonSerializer.Serialize(nuevoPunto));
-            nuevoPunto.LocalId = puntoLocalId;
-            marcador = nuevoPunto;
-            esPrimeraFoto = true;
-        }
+            var fotoId = await _localDb.InsertFotoAsync(foto);
+            await _localDb.EnqueueAsync("Create", "Foto", fotoId,
+                System.Text.Json.JsonSerializer.Serialize(foto));
 
-        // Guardar la foto en disco
-        var photosDir = Path.Combine(
-            Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData),
-            "photos");
-        Directory.CreateDirectory(photosDir);
-        var localPath = Path.Combine(photosDir, $"{Guid.NewGuid()}.jpg");
-        await File.WriteAllBytesAsync(localPath, fotoBytes);
+            System.Diagnostics.Debug.WriteLine($"[GeoFoto] FotoLocal guardada en DB: fotoId={fotoId}");
 
-        var foto = new LocalFoto
-        {
-            PuntoLocalId = puntoLocalId,
-            NombreArchivo = Path.GetFileName(localPath),
-            RutaLocal = localPath,
-            LatitudExif = pos is not null ? (decimal)pos.Latitud : null,
-            LongitudExif = pos is not null ? (decimal)pos.Longitud : null,
-            SyncStatus = SyncStatusValues.PendingCreate
-        };
-        var fotoId = await _localDb.InsertFotoAsync(foto);
-        await _localDb.EnqueueAsync("Create", "Foto", fotoId,
-            System.Text.Json.JsonSerializer.Serialize(foto));
-
-        if (esPrimeraFoto)
-        {
-            Snackbar.Add("Foto guardada — completá los datos del punto", Severity.Success);
-            var dlgParams = new DialogParameters<EditarPuntoDialog>
+            // Mostrar snackbar y diálogo de edición en el hilo del renderer de Blazor
+            await InvokeAsync(async () =>
             {
-                { x => x.NombreInicial, marcador.Nombre },
-                { x => x.DescripcionInicial, marcador.Descripcion }
-            };
-            var dlg = await DialogService.ShowAsync<EditarPuntoDialog>("", dlgParams,
-                new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
-            var result = await dlg.Result;
-            if (!result.Canceled && result.Data is ValueTuple<string?, string?> datos)
+                if (esPrimeraFoto)
+                {
+                    Snackbar.Add("Foto guardada — completá los datos del punto", Severity.Success);
+                    var dlgParams = new DialogParameters<EditarPuntoDialog>
+                    {
+                        { x => x.NombreInicial, marcador.Nombre },
+                        { x => x.DescripcionInicial, marcador.Descripcion }
+                    };
+                    var dlg = await DialogService.ShowAsync<EditarPuntoDialog>("", dlgParams,
+                        new DialogOptions { MaxWidth = MaxWidth.Small, FullWidth = true });
+                    var result = await dlg.Result;
+                    if (!result.Canceled && result.Data is ValueTuple<string?, string?> datos)
+                    {
+                        marcador.Nombre = datos.Item1;
+                        marcador.Descripcion = datos.Item2;
+                        await _localDb.UpdatePuntoAsync(marcador);
+                    }
+                }
+                else
+                {
+                    Snackbar.Add("Foto agregada al punto", Severity.Success);
+                }
+            });
+
+            // Recentrar mapa y recargar marcadores
+            if (pos is not null && _mapaListo)
+                await JS.InvokeVoidAsync("leafletInterop.mostrarPosicionGps",
+                    pos.Latitud, pos.Longitud, pos.Precision);
+
+            await CargarPuntosAsync();
+            if (_mapaListo)
             {
-                marcador.Nombre = datos.Item1;
-                marcador.Descripcion = datos.Item2;
-                await _localDb.UpdatePuntoAsync(marcador);
+                await JS.InvokeVoidAsync("leafletInterop.addMarkers", _puntos, _dotnetRef, false);
+                await JS.InvokeVoidAsync("leafletInterop.invalidateSize");
             }
         }
-        else
+        catch (Exception ex)
         {
-            Snackbar.Add("Foto agregada al punto", Severity.Success);
-        }
-
-        // Recentrar mapa y recargar marcadores
-        if (pos is not null && _mapaListo)
-            await JS.InvokeVoidAsync("leafletInterop.mostrarPosicionGps",
-                pos.Latitud, pos.Longitud, pos.Precision);
-
-        await CargarPuntosAsync();
-        if (_mapaListo)
-        {
-            await JS.InvokeVoidAsync("leafletInterop.addMarkers", _puntos, _dotnetRef, false);
-            await JS.InvokeVoidAsync("leafletInterop.invalidateSize");
+            System.Diagnostics.Debug.WriteLine($"[GeoFoto] ERROR en OnCapturaFoto: {ex}");
+            await InvokeAsync(() =>
+            {
+                Snackbar.Add($"Error al guardar la foto: {ex.Message}", Severity.Error);
+                StateHasChanged();
+            });
         }
     }
 
