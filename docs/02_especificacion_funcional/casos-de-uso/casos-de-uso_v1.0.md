@@ -2,9 +2,9 @@
 
 **Proyecto:** GeoFoto — Registro Georeferenciado de Fotografías Offline-First
 **Documento:** casos-de-uso_v1.0.md
-**Versión:** 1.0
-**Estado:** Borrador
-**Fecha:** 2026-04-13
+**Versión:** 1.1
+**Estado:** Activo
+**Fecha:** 2026-04-16
 **Autor:** Equipo Técnico
 
 ---
@@ -35,6 +35,16 @@ El presente documento describe de manera exhaustiva los casos de uso del sistema
 | CU-14 | Resolver conflicto automáticamente | Sistema | EP-07 Resolución de Conflictos |
 | CU-15 | Ver historial de operaciones de sync | Técnico de campo | EP-06 Sincronización |
 | CU-16 | Subir foto desde web (online directo) | Supervisor | EP-01 Captura |
+| CU-17 | Centrar mapa en posición GPS actual | Técnico / Supervisor | EP-08 UX Avanzado |
+| CU-18 | Mostrar posición propia en mapa | Sistema | EP-08 UX Avanzado |
+| CU-19 | Visualizar y ajustar radio del marker | Técnico de campo | EP-08 UX Avanzado |
+| CU-20 | Abrir popup de marker con carrusel editable | Técnico / Supervisor | EP-08 UX Avanzado |
+| CU-21 | Ampliar foto en fullscreen con descripción | Técnico / Supervisor | EP-08 UX Avanzado |
+| CU-22 | Eliminar foto desde carrusel | Técnico / Supervisor | EP-08 UX Avanzado |
+| CU-23 | Ver y disparar sincronización manual | Técnico de campo | EP-08 UX Avanzado |
+| CU-24 | Buscar y navegar a marker desde lista | Técnico / Supervisor | EP-08 UX Avanzado |
+| CU-25 | Eliminar marker con todas sus fotos | Técnico / Supervisor | EP-08 UX Avanzado |
+| CU-26 | Descargar fotos de marker como zip (Web) | Supervisor | EP-08 UX Avanzado |
 
 ---
 
@@ -367,7 +377,7 @@ Entonces se revierte la transacción completa
 
 ---
 
-## CU-05: Visualizar mapa con markers
+## CU-05: Visualizar mapa con markers [ACTUALIZADO — ESC-02 y ESC-03]
 
 ### Actor Principal
 
@@ -397,10 +407,17 @@ Técnico / Supervisor.
 2. El mapa se muestra vacío, centrado en la posición predeterminada.
 3. Se presenta un mensaje indicando "No se encontraron puntos registrados."
 
-**FA-02 — Error al cargar Leaflet.js:**
-1. La invocación de `IJSRuntime` falla al inicializar Leaflet.js.
-2. Se muestra un `MudAlert` de tipo Error indicando "No se pudo cargar el componente de mapa."
+**FA-02 — Error al cargar Leaflet.js (ESC-02):**
+1. La invocación de `IJSRuntime` falla al inicializar Leaflet.js o el BlazorWebView no cargó.
+2. Se muestra una pantalla de error con el mensaje "Mapa no disponible — intentá reiniciar la aplicación." con un botón "Reintentar" que vuelve a invocar initMap.
 3. Se registra un log de error con el detalle de la excepción.
+
+**FA-04 — GPS sin permiso al iniciar (ESC-03):**
+1. Al iniciar la app, el GPS/ubicación no está habilitado o el permiso no fue otorgado.
+2. Se muestra dialog nativo de solicitud de permiso.
+3. Si el usuario deniega: MudDialog con explicación y botón "Ir a Configuración".
+4. Si el usuario niega permanentemente: el mapa carga igual pero sin centrado GPS, con snackbar permanente "Sin permiso de ubicación — el mapa está disponible pero sin tu posición."
+5. En ningún caso la app queda bloqueada sin mapa.
 
 **FA-03 — Punto con coordenadas (0, 0):**
 1. Se detectan puntos cuyas coordenadas son (0.0, 0.0).
@@ -1333,11 +1350,355 @@ Entonces se muestra un MudAlert de error sugiriendo verificar la conectividad
 
 ---
 
+---
+
+## CU-17: Centrar mapa en posición GPS actual
+
+### Actor Principal
+Técnico de campo / Supervisor.
+
+### Precondiciones
+- El mapa se encuentra cargado y visible.
+- En Mobile: se han otorgado permisos de ubicación. En Web: el browser permite geolocation.
+
+### Flujo Principal
+1. El usuario toca el FAB de GPS (Mobile) o el botón de ubicación (Web).
+2. El sistema solicita la posición actual: en Mobile mediante `IDeviceLocationService.GetCurrentLocationAsync()`, en Web mediante `navigator.geolocation.getCurrentPosition()`.
+3. Si la posición se obtiene en menos de 10s: el sistema invoca `leafletInterop.setView(lat, lng, 15)`.
+4. El mapa se centra en las coordenadas actuales con zoom 15.
+
+### Flujos Alternativos
+**FA-01 — Timeout de GPS (>10s):** Se muestra ``MudSnackbar`` Warning "No se pudo obtener ubicación".
+**FA-02 — Permiso denegado:** Se aplica ESC-03 (dialog nativo → configuración).
+**FA-03 — Browser deniega geolocation:** Se muestra "Permiso de ubicación denegado en el navegador. Habilitalo desde la configuración del sitio."
+
+### Postcondiciones
+- El mapa está centrado en las coordenadas GPS actuales con zoom 15, o se informó al usuario del error.
+
+### Criterios de Aceptación BDD
+```
+Escenario 1: Centrado exitoso
+Dado que el permiso GPS está concedido
+Cuando el usuario toca el FAB de GPS
+Entonces el mapa se centra con setView(lat, lng, 15) en menos de 2 segundos
+
+Escenario 2: Timeout de GPS
+Dado que el GPS tarda más de 10 segundos
+Cuando el sistema espera la posición
+Entonces se muestra MudSnackbar Warning "No se pudo obtener ubicación"
+
+Escenario 3: Permiso denegado
+Dado que el permiso GPS está denegado
+Cuando el usuario toca el FAB de GPS
+Entonces se muestra dialog de solicitud de permiso (Mobile) o mensaje de configuración (Web)
+```
+
+---
+
+## CU-18: Mostrar posición propia en mapa
+
+### Actor Principal
+Sistema.
+
+### Precondiciones
+- La app está iniciada y el permiso de ubicación fue concedido.
+
+### Flujo Principal
+1. Al iniciar el mapa, comienza el polling de posición cada 5 segundos.
+2. Para cada posición obtenida: el sistema invoca `leafletInterop.updateUserPosition(lat, lng)` que renderiza un ``L.circleMarker`` azul pulsante.
+3. Si se pierde el GPS: se invoca `leafletInterop.clearUserPosition()` y se muestra MudSnackbar warning.
+
+### Postcondiciones
+- El marcador de posición propia está visible y actualizado, diferenciado visualmente de los markers de fotos.
+
+### Criterios de Aceptación BDD
+```
+Escenario 1: Posición propia activa
+Dado que el GPS está activo y el permiso fue concedido
+Cuando el mapa está cargado
+Entonces aparece un círculo azul pulsante en la posición actual del usuario
+  Y se actualiza cada 5 segundos
+
+Escenario 2: Pérdida de GPS
+Dado que el marcador de posición está visible
+Cuando se pierde la señal GPS
+Entonces el marcador desaparece del mapa
+  Y se muestra MudSnackbar warning
+```
+
+---
+
+## CU-19: Visualizar y ajustar radio del marker
+
+### Actor Principal
+Técnico de campo.
+
+### Precondiciones
+- El mapa está cargado y existe al menos un marker.
+
+### Flujo Principal
+1. El usuario toca un marker en el mapa.
+2. Se abre el popup y el sistema invoca `leafletInterop.showMarkerRadius(puntoId, lat, lng, radioMetros)` mostrando un círculo semi-transparente.
+3. El usuario mueve el ``MudSlider`` (10-500m) en el popup.
+4. Al cambiar: `leafletInterop.updateMarkerRadius(puntoId, radioMetros)` + guardar en Preferences + SQLite.
+5. Al cerrar el popup: `leafletInterop.hideMarkerRadius(puntoId)`.
+
+### Postcondiciones
+- El radio queda persistido en Preferences y en el ``Punto_Local`` de SQLite.
+- El nuevo radio se aplica globalmente para las decisiones de agrupación.
+
+### Criterios de Aceptación BDD
+```
+Escenario 1: Radio modificado y persistido
+Dado que el popup de un marker está abierto
+Cuando el usuario mueve el slider a 100m
+Entonces el círculo semi-transparente se expande a 100m
+  Y el valor se persiste en Preferences y SQLite
+
+Escenario 2: Nueva foto dentro del radio
+Dado que el radio de un marker es 100m
+Cuando se captura una foto a 80m de ese marker
+Entonces la foto se asocia al marker existente (no crea nuevo)
+```
+
+---
+
+## CU-20: Abrir popup de marker con carrusel editable
+
+### Actor Principal
+Técnico de campo / Supervisor.
+
+### Precondiciones
+- El mapa está cargado con al menos un marker.
+
+### Flujo Principal
+1. El usuario toca un marker en el mapa.
+2. El sistema invoca el callback ``OnMarkerClick(puntoId)`` via JS Interop.
+3. Se abre un ``MudDialog`` con ``MarkerPopup`` que muestra: título (``MudTextField`` editable), descripción (``MudTextField`` multilínea), ``FotoCarousel`` con las fotos del punto, botón "Agregar foto", botón "Eliminar marker", botón "Cerrar".
+4. Al perder foco en cualquier campo: se guarda automáticamente en SQLite y SyncQueue.
+
+### Flujos Alternativos
+**FA-01 — Sin fotos:** Se muestra "Este punto no tiene fotos — usá el botón de cámara para agregar la primera."
+
+### Postcondiciones
+- Los cambios en título, descripción y comentarios de fotos están persistidos en SQLite y encolados para sync.
+
+### Criterios de Aceptación BDD
+```
+Escenario 1: Popup con fotos
+Dado que el marker tiene 3 fotos
+Cuando el usuario lo toca
+Entonces se abre MudDialog con título editable, descripción y FotoCarousel con 3 fotos
+
+Escenario 2: Popup sin fotos
+Dado que el marker no tiene fotos
+Cuando el usuario lo toca
+Entonces se muestra el mensaje "Este punto no tiene fotos..."
+
+Escenario 3: Edición de título persiste
+Dado que el popup está abierto
+Cuando el usuario edita el título y pierde el foco
+Entonces el nuevo título se guarda en SQLite y se encola en SyncQueue
+```
+
+---
+
+## CU-21: Ampliar foto en fullscreen con descripción
+
+### Actor Principal
+Técnico de campo / Supervisor.
+
+### Precondiciones
+- El popup de un marker está abierto y el carrusel tiene al menos una foto.
+
+### Flujo Principal
+1. El usuario toca una foto en el ``FotoCarousel``.
+2. Se abre el componente ``FotoViewer`` (``MudOverlay``) con la imagen a tamaño completo.
+3. El usuario puede editar el comentario de esa foto en el ``MudTextField`` del visor.
+4. Al guardar o cerrar: el comentario se persiste en SQLite.
+5. Al tocar ✕ o fuera de la imagen: se cierra el visor y se vuelve al carrusel en la misma posición.
+
+### Criterios de Aceptación BDD
+```
+Escenario 1: Ampliar foto
+Dado que el carrusel está en la segunda foto
+Cuando el usuario la toca
+Entonces se abre el visor fullscreen con esa imagen
+  Y al cerrar vuelve al carrusel en posición 2
+
+Escenario 2: Editar descripción de foto
+Dado que el visor está abierto
+Cuando el usuario escribe en el campo de descripción y cierra
+Entonces el comentario queda guardado en SQLite para esa foto
+```
+
+---
+
+## CU-22: Eliminar foto desde carrusel
+
+### Actor Principal
+Técnico de campo / Supervisor.
+
+### Precondiciones
+- El popup de un marker está abierto y el carrusel tiene al menos una foto.
+
+### Flujo Principal
+1. El usuario toca el botón ✕ de una foto en el carrusel.
+2. Se abre un ``MudDialog`` de confirmación: "¿Eliminar esta foto? Esta acción no se puede deshacer."
+3. El usuario confirma.
+4. La foto se marca ``IsDeleted=true`` en SQLite y se encola ``PendingDelete`` en SyncQueue.
+5. El carrusel se actualiza sin cerrar el popup.
+
+### Flujos Alternativos
+**FA-01 — El usuario cancela:** No se realiza ninguna acción.
+
+### Criterios de Aceptación BDD
+```
+Escenario 1: Eliminar foto con confirmación
+Dado que el carrusel muestra 3 fotos
+Cuando el usuario toca ✕ en la primera y confirma
+Entonces el carrusel pasa a mostrar 2 fotos
+  Y la foto eliminada tiene IsDeleted=true en SQLite
+  Y hay una entrada PendingDelete en SyncQueue
+
+Escenario 2: Cancelar eliminación
+Dado que el dialog de confirmación está abierto
+Cuando el usuario toca "Cancelar"
+Entonces el carrusel permanece sin cambios
+```
+
+---
+
+## CU-23: Ver y disparar sincronización manual
+
+### Actor Principal
+Técnico de campo.
+
+### Precondiciones
+- La app está iniciada.
+
+### Flujo Principal
+1. El usuario navega a la pantalla "Sincronización" desde la AppBar.
+2. Se muestra: fecha/hora de última sync, items pendientes, items fallidos con motivo.
+3. El usuario toca "Sincronizar ahora".
+4. El sistema deshabilita el botón, muestra spinner y dispara ``SyncService.PushAsync() + PullAsync()``.
+5. Al terminar: se actualiza la fecha/hora de última sync, se habilita el botón.
+
+### Criterios de Aceptación BDD
+```
+Escenario 1: Sincronización manual exitosa
+Dado que hay 3 items pendientes
+Cuando el usuario toca "Sincronizar ahora"
+Entonces el botón muestra spinner y el badge en AppBar se anima
+  Y al terminar los items quedan como Synced
+  Y la fecha de última sync se actualiza
+
+Escenario 2: Sin pendientes
+Dado que no hay items pendientes
+Cuando el usuario abre la pantalla de sync
+Entonces se muestra "0 pendientes" y la última fecha de sync
+```
+
+---
+
+## CU-24: Buscar y navegar a marker desde lista
+
+### Actor Principal
+Técnico de campo / Supervisor.
+
+### Precondiciones
+- La app está iniciada con al menos un punto registrado.
+
+### Flujo Principal
+1. El usuario navega a la pantalla "Lista de markers".
+2. Se muestra un ``MudTable`` con todos los puntos: nombre, coordenadas, N fotos, estado sync (``MudChip``).
+3. El usuario escribe en el ``MudTextField`` de búsqueda.
+4. La lista filtra en tiempo real por nombre.
+5. El usuario toca un ítem: el mapa se centra en ese marker y se abre el popup (invoca CU-20).
+
+### Criterios de Aceptación BDD
+```
+Escenario 1: Búsqueda y navegación
+Dado que existen 10 markers
+Cuando el usuario escribe "poste" en el campo de búsqueda
+Entonces la lista muestra solo los markers cuyo nombre contiene "poste"
+  Y al tocar uno el mapa se centra y el popup se abre
+```
+
+---
+
+## CU-25: Eliminar marker con todas sus fotos
+
+### Actor Principal
+Técnico de campo / Supervisor.
+
+### Precondiciones
+- El popup de un marker está abierto.
+
+### Flujo Principal
+1. El usuario toca "Eliminar marker" en el popup.
+2. Se abre un ``MudDialog``: "¿Eliminar este marker y sus N fotos? Esta acción no se puede deshacer."
+3. El usuario confirma.
+4. El sistema elimina ``Punto_Local`` y ``Foto_Local[]`` de SQLite (soft delete).
+5. El marker desaparece del mapa.
+6. Se encola ``PendingDelete`` en SyncQueue.
+
+### Criterios de Aceptación BDD
+```
+Escenario 1: Eliminar marker con confirmación
+Dado que el popup del marker está abierto y tiene 2 fotos
+Cuando el usuario toca "Eliminar marker" y confirma
+Entonces el marker desaparece del mapa
+  Y el punto y sus 2 fotos quedan como IsDeleted en SQLite
+  Y hay una entrada PendingDelete en SyncQueue
+
+Escenario 2: Cancelar
+Dado que el dialog de confirmación está abierto
+Cuando el usuario cancela
+Entonces el marker permanece en el mapa
+```
+
+---
+
+## CU-26: Descargar fotos de marker como zip (Web)
+
+### Actor Principal
+Supervisor.
+
+### Precondiciones
+- El popup del marker está abierto en la web (IsMobile=false).
+- El marker tiene al menos una foto.
+
+### Flujo Principal
+1. El supervisor toca el botón "Descargar fotos" en el popup.
+2. El sistema llama ``GET /api/puntos/{id}/fotos/download``.
+3. El servidor genera un .zip con las fotos nombradas ``{nombrePunto}_{n}.jpg``.
+4. El browser descarga el .zip automáticamente.
+
+### Flujos Alternativos
+**FA-01 — Sin fotos:** El botón está deshabilitado.
+
+### Criterios de Aceptación BDD
+```
+Escenario 1: Descarga exitosa
+Dado que el marker tiene 3 fotos
+Cuando el supervisor toca "Descargar fotos"
+Entonces el browser descarga un archivo .zip con 3 imágenes
+
+Escenario 2: Sin fotos
+Dado que el marker no tiene fotos
+Cuando el popup está abierto en la web
+Entonces el botón "Descargar fotos" está deshabilitado
+```
+
+---
+
 # 3. Control de Cambios
 
 | Versión | Fecha | Descripción |
 |---------|-------|-------------|
 | 1.0 | 2026-04-13 | Versión inicial |
+| 1.1 | 2026-04-16 | Agregados CU-17 a CU-26 (UX avanzado). Actualizado CU-05 con ESC-02/03 (mapa no disponible y GPS sin permiso). |
 
 ---
 

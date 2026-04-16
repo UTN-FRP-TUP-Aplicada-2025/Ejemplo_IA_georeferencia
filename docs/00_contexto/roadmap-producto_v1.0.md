@@ -2,9 +2,9 @@
 
 **Proyecto:** GeoFoto — Registro Georeferenciado de Fotografías Offline-First
 **Documento:** roadmap-producto_v1.0.md
-**Versión:** 1.0
-**Estado:** Borrador
-**Fecha:** 2026-04-13
+**Versión:** 1.1
+**Estado:** Activo
+**Fecha:** 2026-04-16
 **Autor:** Equipo Técnico
 
 ---
@@ -62,6 +62,22 @@ Conectar la visión del producto con el backlog técnico y el plan de sprints. E
 
 ---
 
+## Fase 4 — UX Avanzado y Funcionalidades Completas (Sprints 07–08)
+
+- **Objetivo:** Los técnicos de campo tienen una experiencia UX completa en Android (GPS, carrusel, radio, sync visual, lista de markers) y los supervisores tienen la misma experiencia en web más capacidades exclusivas (zip, upload desde browser).
+- **Épicas:**
+  - GEO-E07 — UX Avanzado Mobile + Web
+- **Historias:**
+  - Sprint 07: GEO-US20b a GEO-US29 (Android completo — GPS, radio, carrusel, sync, lista, eliminar)
+  - Sprint 08: GEO-US30 a GEO-US33 (Android compartir + Web geolocation + zip + upload)
+- **Entregable:** App Android con GPS FAB, marcador propio, radio visual, carrusel completo con edición, sync badge, lista de markers y eliminación. Web con paridad funcional, descarga zip y subida de fotos.
+- **Release target:** v1.1.0-sprint07 / v1.1.0-sprint08
+- **Criterio de entrada:** Fase 3 completada. Pipeline CI/CD funcionando. Tests con cobertura ≥ 80%.
+- **Criterio de salida:** Todos los Must Have de GEO-US20b–29 aprobados en dispositivo Android físico. GEO-US31–33 validados en browser. Cobertura SyncService ≥ 85%.
+- **Nota de capacidad:** Sprint 07 tiene ~57 story points (Must+Should) vs velocidad histórica de 21 pts/sprint. Se recomienda dividir en Sprint 07A (GEO-US20b+21+22+26 = 21 pts), Sprint 07B (GEO-US23+27+25 = 23 pts) y Sprint 07C (GEO-US24+28+29 = 21 pts). Los planes de sprint contemplan esta distribución.
+
+---
+
 ## Futuro — Evolución (v2.0)
 
 - **Objetivo:** Autenticación, mapas offline con tiles cacheados, soporte multiusuario, almacenamiento en Azure Blob.
@@ -93,6 +109,15 @@ Conectar la visión del producto con el backlog técnico y el plan de sprints. E
 | Sprint 05 | El sistema tiene CI/CD funcionando y el motor de sync tiene cobertura de tests garantizada | GEO-E06 |
 | Sprint 06 | El sistema está listo para uso productivo en campo con fluidez y distribución resueltos | GEO-E06 |
 
+## Fase 4 — UX Avanzado y Funcionalidades Completas
+
+| Sprint    | Sprint Goal | Épicas  |
+|-----------|------------|---------|
+| Sprint 07A | GPS FAB + posición propia + radio visual + ampliar foto (21 pts) | GEO-E07 |
+| Sprint 07B | Popup carrusel completo + pantalla sync + quitar foto (23 pts) | GEO-E07 |
+| Sprint 07C | Offline-first robusto + lista markers + eliminar marker (21 pts) | GEO-E07 |
+| Sprint 08  | Compartir foto Android + Web paridad + descarga zip + upload browser (20 pts) | GEO-E07 |
+
 ---
 
 # 4. Matriz de Trazabilidad Fase → Épica → Sprints → Release → Capacidad
@@ -102,6 +127,7 @@ Conectar la visión del producto con el backlog técnico y el plan de sprints. E
 | Fase 1 — Núcleo Online | GEO-E01, GEO-E02, GEO-E03 | Sprint 01–02 | v1.0.0-beta | Captura web + mapa + gestión de puntos + app MAUI con red |
 | Fase 2 — Offline-First | GEO-E04, GEO-E05 | Sprint 03–04 | v1.0.0-rc | Operación offline + sync automático + resolución de conflictos |
 | Fase 3 — Madurez | GEO-E06 | Sprint 05–06 | v1.0.0 | CI/CD + tests + performance + distribución APK |
+| Fase 4 — UX Avanzado | GEO-E07 | Sprint 07–08 | v1.1.0 | GPS FAB + radio + carrusel + sync badge + lista + web paridad + zip + upload |
 | Futuro | Por definir | Por definir | v2.0.0 | Auth + mapas offline + multiusuario + Azure Blob |
 
 ---
@@ -131,6 +157,7 @@ Para avanzar de una fase a la siguiente:
 | Versión | Fecha | Descripción |
 |---------|-------|-------------|
 | 1.0 | 2026-04-13 | Versión inicial |
+| 1.1 | 2026-04-16 | Agregada Fase 4 "UX Avanzado y Funcionalidades Completas" con Sprint 07A/07B/07C y Sprint 08. Épica GEO-E07. |
 
 ---
 

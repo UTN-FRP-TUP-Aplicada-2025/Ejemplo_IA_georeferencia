@@ -4,6 +4,7 @@ public interface IFileStorageService
 {
     Task<string> SaveAsync(Stream stream, string fileName);
     void Delete(string rutaFisica);
+    string GetFullPath(string relativePath);
 }
 
 public class FileStorageService : IFileStorageService
@@ -42,4 +43,6 @@ public class FileStorageService : IFileStorageService
         if (File.Exists(fullPath))
             File.Delete(fullPath);
     }
+
+    public string GetFullPath(string relativePath) => Path.Combine(_basePath, relativePath);
 }

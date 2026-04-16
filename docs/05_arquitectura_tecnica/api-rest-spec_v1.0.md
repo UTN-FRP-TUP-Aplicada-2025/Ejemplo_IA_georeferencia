@@ -25,6 +25,8 @@
    - 5.2 [GET /api/fotos/{puntoId}](#52-get-apifotospuntoid)
    - 5.3 [GET /api/fotos/imagen/{id}](#53-get-apifotosimagenid)
    - 5.4 [DELETE /api/fotos/{id}](#54-delete-apifotosid)
+   - 5.5 [PUT /api/fotos/{id}](#55-put-apifotosid)
+   - 5.6 [GET /api/puntos/{id}/fotos/download](#56-get-apipuntosidfotos-download)
 6. [Endpoints de Sincronización](#6-endpoints-de-sincronización)
    - 6.1 [GET /api/sync/delta](#61-get-apisyncdelta)
    - 6.2 [POST /api/sync/batch](#62-post-apisyncbatch)
@@ -296,17 +298,21 @@ No se requieren parámetros de ruta ni de query.
 
 #### Cuerpo de la Solicitud
 
-| Campo         | Tipo     | Requerido | Descripción                                         |
-|---------------|----------|-----------|-----------------------------------------------------|
-| `nombre`      | `string` | Sí        | Nuevo nombre del punto (máx. 200 caracteres).       |
-| `descripcion` | `string` | Sí        | Nueva descripción del punto (máx. 500 caracteres).  |
+| Campo          | Tipo      | Requerido | Descripción                                                     |
+|----------------|-----------|-----------|------------------------------------------------------------------|
+| `nombre`       | `string`  | Sí        | Nuevo nombre del punto (máx. 200 caracteres).                    |
+| `descripcion`  | `string`  | No        | Nueva descripción del punto (máx. 1000 caracteres).              |
+| `radioMetros`  | `double`  | No        | Radio de agrupación del marker en metros (10–500). Default: 50.  |
+| `updatedAt`    | `string`  | No        | Marca temporal ISO 8601 del cliente para resolución LWW. Si se omite, el servidor usa su propio reloj. |
 
 #### Ejemplo de Solicitud
 
 ```json
 {
   "nombre": "Catedral de Córdoba (Centro)",
-  "descripcion": "Catedral Nuestra Señora de la Asunción, centro histórico."
+  "descripcion": "Catedral Nuestra Señora de la Asunción, centro histórico.",
+  "radioMetros": 75.0,
+  "updatedAt": "2026-04-13T11:44:00Z"
 }
 ```
 
@@ -319,6 +325,8 @@ No se requieren parámetros de ruta ni de query.
   "longitud": -64.188776,
   "nombre": "Catedral de Córdoba (Centro)",
   "descripcion": "Catedral Nuestra Señora de la Asunción, centro histórico.",
+  "radioMetros": 75.0,
+  "isDeleted": false,
   "fechaCreacion": "2026-04-13T10:00:00Z",
   "updatedAt": "2026-04-13T11:45:00Z",
   "cantidadFotos": 0
@@ -609,6 +617,111 @@ No se retorna cuerpo en la respuesta.
 
 ---
 
+### 5.5 PUT /api/fotos/{id}
+
+**Descripción:** Actualiza el comentario individual de una foto. Usado por el carrusel y el visor fullscreen para persistir la descripción por foto en el servidor.
+
+| Atributo       | Valor                                            |
+|----------------|--------------------------------------------------|
+| **Método**     | `PUT`                                            |
+| **Ruta**       | `/api/fotos/{id}`                                |
+| **Consume**    | `application/json`                               |
+| **Produce**    | `application/json`                               |
+
+#### Parámetros
+
+| Nombre | Ubicación | Tipo  | Requerido | Descripción                          |
+|--------|-----------|-------|-----------|--------------------------------------|
+| `id`   | Path      | `int` | Sí        | Identificador único de la foto.      |
+
+#### Cuerpo de la Solicitud
+
+| Campo        | Tipo     | Requerido | Descripción                                                      |
+|--------------|----------|-----------|------------------------------------------------------------------|
+| `comentario` | `string` | No        | Descripción individual de la foto (máx. 500 caracteres).         |
+| `updatedAt`  | `string` | No        | Marca temporal ISO 8601 del cliente para resolución LWW.         |
+
+#### Ejemplo de Solicitud
+
+```json
+{
+  "comentario": "Vista desde el norte, base claramente dañada.",
+  "updatedAt": "2026-04-13T11:30:00Z"
+}
+```
+
+#### Ejemplo de Respuesta — `200 OK`
+
+```json
+{
+  "id": 15,
+  "puntoId": 1,
+  "comentario": "Vista desde el norte, base claramente dañada.",
+  "isDeleted": false,
+  "updatedAt": "2026-04-13T11:31:00Z"
+}
+```
+
+#### Códigos HTTP
+
+| Código | Descripción                                                     |
+|--------|-----------------------------------------------------------------|
+| `200`  | Foto actualizada correctamente.                                 |
+| `404`  | No se encontró una foto con el `id` especificado.               |
+| `500`  | Error interno del servidor.                                     |
+
+#### Notas de Comportamiento
+
+- Solo se puede actualizar el campo `comentario`. Los metadatos de la imagen (ruta, tamaño, EXIF) son inmutables.
+- Si `updatedAt` del cliente es anterior al `updatedAt` del servidor, se aplica LWW y se retorna el estado actual sin modificar (HTTP 200 con cuerpo del servidor).
+
+---
+
+### 5.6 GET /api/puntos/{id}/fotos/download
+
+**Descripción:** Descarga todas las fotos asociadas a un punto georeferenciado comprimidas en un archivo ZIP. Disponible exclusivamente en el cliente web (GeoFoto.Web). Requiere que el punto tenga al menos una foto.
+
+| Atributo       | Valor                                              |
+|----------------|----------------------------------------------------|
+| **Método**     | `GET`                                              |
+| **Ruta**       | `/api/puntos/{id}/fotos/download`                  |
+| **Produce**    | `application/zip`                                  |
+
+#### Parámetros
+
+| Nombre | Ubicación | Tipo  | Requerido | Descripción                          |
+|--------|-----------|-------|-----------|--------------------------------------|
+| `id`   | Path      | `int` | Sí        | Identificador único del punto.       |
+
+#### Ejemplo de Solicitud
+
+```
+GET /api/puntos/3/fotos/download
+```
+
+#### Ejemplo de Respuesta — `200 OK`
+
+- Content-Type: `application/zip`  
+- Content-Disposition: `attachment; filename="Catedral_de_Cordoba_Centro.zip"`  
+- Body: archivo ZIP con las fotos nombradas como `{nombrePuntoSanitizado}_{n}.jpg`
+
+#### Códigos HTTP
+
+| Código | Descripción                                                     |
+|--------|-----------------------------------------------------------------|
+| `200`  | ZIP generado y retornado correctamente.                         |
+| `404`  | No se encontró el punto o el punto no tiene fotos activas.      |
+| `500`  | Error interno del servidor al generar el ZIP.                   |
+
+#### Notas de Comportamiento
+
+- Las fotos con `IsDeleted = true` no se incluyen en el ZIP.
+- El nombre de cada archivo dentro del ZIP sigue el patrón `{nombrePuntoSanitizado}_{n}.{ext}`, donde `n` es el índice de la foto (1-based) y `{ext}` es la extensión original.
+- El nombre del punto se sanitiza para uso en nombre de archivo (se reemplazan espacios por `_` y se eliminan caracteres no permitidos en nombres de archivo).
+- El ZIP se genera en memoria con `System.IO.Compression.ZipArchive` y se envía como stream para no sobrecargar la RAM del servidor.
+
+---
+
 ## 6. Endpoints de Sincronización
 
 ### 6.1 GET /api/sync/delta
@@ -644,6 +757,8 @@ GET /api/sync/delta?since=2026-04-12T00:00:00Z
       "longitud": -58.381592,
       "nombre": "Obelisco",
       "descripcion": "Monumento histórico en el centro de Buenos Aires.",
+      "radioMetros": 50.0,
+      "isDeleted": false,
       "fechaCreacion": "2026-04-10T08:15:00Z",
       "updatedAt": "2026-04-12T14:30:00Z"
     },
@@ -653,6 +768,8 @@ GET /api/sync/delta?since=2026-04-12T00:00:00Z
       "longitud": -64.188776,
       "nombre": "Catedral de Córdoba (Centro)",
       "descripcion": "Catedral Nuestra Señora de la Asunción, centro histórico.",
+      "radioMetros": 75.0,
+      "isDeleted": false,
       "fechaCreacion": "2026-04-13T10:00:00Z",
       "updatedAt": "2026-04-13T11:45:00Z"
     }
@@ -666,6 +783,8 @@ GET /api/sync/delta?since=2026-04-12T00:00:00Z
       "tamanoBytes": 2457600,
       "latitudExif": -34.603722,
       "longitudExif": -58.381592,
+      "comentario": "Vista frontal del marker.",
+      "isDeleted": false,
       "updatedAt": "2026-04-13T10:30:15Z"
     }
   ],
@@ -693,8 +812,9 @@ GET /api/sync/delta?since=2026-04-12T00:00:00Z
   }
   ```
 - El campo `ultimaSync` representa la fecha y hora UTC del servidor al momento de procesar la consulta. El cliente debe almacenar este valor para utilizarlo en la próxima solicitud delta.
-- Se incluyen tanto registros creados como modificados. Los registros eliminados no se incluyen en la respuesta delta de v1.0.
+- Se incluyen registros creados, modificados y eliminados (con `isDeleted = true`). Los clientes móviles deben eliminar localmente los registros con `isDeleted = true` al procesar el delta.
 - El parámetro `since` debe estar en formato ISO 8601. Ejemplo válido: `2026-04-12T00:00:00Z`.
+- Los campos `radioMetros`, `isDeleted` y `comentario` se incluyen en la respuesta delta desde v1.1.
 
 ---
 
@@ -935,6 +1055,7 @@ Para despliegues en producción con mayor escala, se prevé la utilización del 
 | Versión | Fecha       | Autor           | Descripción                                        |
 |---------|-------------|-----------------|-----------------------------------------------------|
 | 1.0     | 2026-04-13  | Equipo Técnico  | Creación inicial del documento con 11 endpoints.    |
+| 1.1     | 2026-04-16  | Equipo Técnico  | Sprint 07/08 — Agregados `PUT /api/fotos/{id}` (comentario) y `GET /api/puntos/{id}/fotos/download` (zip). Actualizado `PUT /api/puntos/{id}` con campo `radioMetros`. Respuesta delta incluye `isDeleted`, `radioMetros`, `comentario`. |
 
 ---
 

@@ -2,9 +2,9 @@
 
 **Proyecto:** GeoFoto — Registro Georeferenciado de Fotografías Offline-First
 **Documento:** product-backlog_v1.0.md
-**Versión:** 1.0
-**Estado:** Borrador
-**Fecha:** 2026-04-13
+**Versión:** 1.1
+**Estado:** Activo
+**Fecha:** 2026-04-16
 **Autor:** Equipo Técnico
 
 ---
@@ -35,6 +35,7 @@ Cada historia incluye criterios de aceptación en formato Given-When-Then (Dado-
 | GEO-E04  | Motor offline-first (SQLite)        | Rojo    |
 | GEO-E05  | Motor de sincronización             | Morado  |
 | GEO-E06  | Calidad, UX y deploy productivo     | Gris    |
+| GEO-E07  | UX Avanzado Mobile + Web            | Cian    |
 
 ---
 
@@ -62,6 +63,20 @@ Cada historia incluye criterios de aceptación en formato Given-When-Then (Dado-
 | GEO-US18   | Pipeline CI/CD que compile, testee y genere APK en cada push                                                     | GEO-E06 | Sprint 06 | 8            | High      | To Do  |
 | GEO-US19   | Tests de integración del motor de sync con cobertura >= 80%                                                      | GEO-E06 | Sprint 06 | 8            | Highest   | To Do  |
 | GEO-US20   | Mapa y app responden fluidamente con 100+ puntos                                                                 | GEO-E06 | Sprint 06 | 5            | Medium    | To Do  |
+| GEO-US20b  | Centrar el mapa en mi posición actual tocando un botón                                                           | GEO-E07 | Sprint 07 | 5            | Must      | ✅ Done |
+| GEO-US21   | Ver mi posición actual como un punto en el mapa                                                                  | GEO-E07 | Sprint 07 | 5            | Must      | ✅ Done |
+| GEO-US22   | Visualizar y ajustar el radio del marker actual                                                                  | GEO-E07 | Sprint 07 | 8            | Must      | ✅ Done |
+| GEO-US23   | Popup de marker con carrusel de fotos, título y descripción del punto, y ampliar cada foto                       | GEO-E07 | Sprint 07 | 13           | Must      | ✅ Done |
+| GEO-US24   | Trabajar offline y que todo se sincronice automáticamente cuando haya red                                        | GEO-E07 | Sprint 07 | 8            | Must      | ✅ Done |
+| GEO-US25   | Quitar fotos desde el carrusel del marker                                                                        | GEO-E07 | Sprint 07 | 5            | Should    | ✅ Done |
+| GEO-US26   | Ampliar fotos desde el carrusel para verlas en detalle                                                           | GEO-E07 | Sprint 07 | 3            | Should    | ✅ Done |
+| GEO-US27   | Ver el estado de sincronización e iniciarlo manualmente                                                          | GEO-E07 | Sprint 07 | 5            | Must      | ✅ Done |
+| GEO-US28   | Ver la lista de todos los markers, buscarlos y editar su carrusel                                                | GEO-E07 | Sprint 07 | 8            | Must      | ✅ Done |
+| GEO-US29   | Eliminar un marker (con todas sus fotos) al seleccionarlo                                                        | GEO-E07 | Sprint 07 | 5            | Should    | ✅ Done |
+| GEO-US30   | Compartir una o más fotos del carrusel a través de apps del dispositivo                                          | GEO-E07 | Sprint 08 | 5            | Could     | ✅ Done |
+| GEO-US31   | En la web, la misma experiencia de mapa que en Android                                                           | GEO-E07 | Sprint 08 | 5            | Must      | ✅ Done |
+| GEO-US32   | Descargar localmente todas las fotos de un marker en un zip                                                      | GEO-E07 | Sprint 08 | 5            | Must      | ✅ Done |
+| GEO-US33   | Subir fotos al carrusel de un marker existente desde el navegador                                                | GEO-E07 | Sprint 08 | 5            | Must      | ✅ Done |
 
 ---
 
@@ -859,6 +874,570 @@ Cada historia incluye criterios de aceptación en formato Given-When-Then (Dado-
 
 ---
 
+## 4.7. Épica GEO-E07 — UX Avanzado Mobile + Web
+
+---
+
+### GEO-US20b: Centrar el mapa en mi posición actual tocando un botón
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 07
+**Story Points:** 5
+**Prioridad:** Must
+**Descripción:** Como técnico de campo, quiero poder centrar el mapa en mi posición actual tocando un botón, para orientarme rápidamente en terreno.
+
+#### Criterios de Aceptación
+
+##### CA-01 Centrado rápido con setView
+
+**Dado** que el técnico se encuentra en la pantalla del mapa con permiso GPS concedido
+**Cuando** toca el FAB de GPS
+**Entonces** el mapa se centra con setView(lat, lng, 15) en menos de 2 segundos.
+
+##### CA-02 Permiso GPS denegado
+
+**Dado** que el permiso GPS está denegado en el sistema
+**Cuando** el técnico toca el FAB de GPS
+**Entonces** se muestra un dialog de solicitud de permiso antes de intentar centrar el mapa.
+
+##### CA-03 Timeout de GPS
+
+**Dado** que el técnico toca el FAB de GPS y el GPS no responde
+**Cuando** transcurren más de 10 segundos sin obtener ubicación
+**Entonces** se muestra un MudSnackbar con Warning "No se pudo obtener ubicación".
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                        | Componente | Estimación |
+| --------- | ------------------------------------------------------------- | ---------- | ---------- |
+| GEO-T89   | Agregar FAB GPS en Mapa.razor con lógica de centrado          | Shared     | 2h         |
+| GEO-T90   | Implementar timeout 10s en GetCurrentLocationAsync            | Mobile     | 2h         |
+| GEO-T91   | Manejar ESC-02 (mapa no disponible) con div de error+reintentar | Shared   | 2h         |
+| GEO-T92   | Manejar ESC-03 (permisos GPS) con los 3 casos posibles        | Mobile     | 3h         |
+
+---
+
+### GEO-US21: Ver mi posición actual como un punto en el mapa
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 07
+**Story Points:** 5
+**Prioridad:** Must
+**Descripción:** Como técnico de campo, quiero ver mi posición actual como un punto en el mapa para saber dónde estoy antes de agregar una foto.
+
+#### Criterios de Aceptación
+
+##### CA-01 Marcador de posición propia
+
+**Dado** que el GPS está activo y el permiso fue concedido
+**Cuando** el técnico está en la pantalla del mapa
+**Entonces** un marcador de posición propia (círculo azul pulsante) aparece y se actualiza en tiempo real.
+
+##### CA-02 Diferenciación visual del marcador de posición
+
+**Dado** que el mapa muestra markers de fotos y el marcador de posición propia
+**Cuando** el técnico observa el mapa
+**Entonces** el marcador de posición propia usa ícono diferente (círculo azul pulsante), no confundible con markers de fotos.
+
+##### CA-03 Pérdida de GPS
+
+**Dado** que el marcador de posición está visible
+**Cuando** se pierde la señal GPS
+**Entonces** el marcador de posición desaparece y se muestra un MudSnackbar warning.
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                           | Componente | Estimación |
+| --------- | ---------------------------------------------------------------- | ---------- | ---------- |
+| GEO-T93   | Agregar updateUserPosition(lat,lng) en leaflet-interop.js        | Shared     | 2h         |
+| GEO-T94   | Agregar clearUserPosition() en leaflet-interop.js                | Shared     | 1h         |
+| GEO-T95   | Iniciar polling de posición cada 5s en Mapa.razor                | Shared     | 2h         |
+
+---
+
+### GEO-US22: Visualizar y ajustar el radio del marker actual
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 07
+**Story Points:** 8
+**Prioridad:** Must
+**Descripción:** Como técnico de campo, quiero visualizar y ajustar el radio del marker actual para decidir si una nueva foto va al marker existente o crea uno nuevo.
+
+#### Criterios de Aceptación
+
+##### CA-01 Círculo semi-transparente en el mapa
+
+**Dado** que el técnico toca un marker
+**Cuando** se abre el popup
+**Entonces** se muestra un círculo semi-transparente en el mapa representando el radio de agrupación actual (default 50 m).
+
+##### CA-02 Slider para ajustar radio
+
+**Dado** que el popup del marker está abierto
+**Cuando** el técnico mueve el slider (rango 10 m – 500 m)
+**Entonces** el círculo se actualiza visualmente y el cambio persiste en Preferences y SQLite.
+
+##### CA-03 Radio global
+
+**Dado** que el técnico modifica el radio desde un marker
+**Cuando** se agrega una nueva foto cerca de cualquier marker
+**Entonces** el radio configurable se aplica globalmente a todos los markers para decisión de agrupación.
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                                | Componente | Estimación |
+| --------- | --------------------------------------------------------------------- | ---------- | ---------- |
+| GEO-T96   | Agregar showMarkerRadius/hideMarkerRadius/updateMarkerRadius en JS    | Shared     | 3h         |
+| GEO-T97   | Agregar MudSlider (10-500m) en MarkerPopup.razor                      | Shared     | 2h         |
+| GEO-T98   | Implementar UpdatePuntoRadioAsync en LocalDbService                   | Mobile     | 2h         |
+| GEO-T99   | Persistir radio en IPreferencesService                                | Mobile     | 1h         |
+
+---
+
+### GEO-US23: Popup de marker con carrusel de fotos, título y descripción
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 07
+**Story Points:** 13
+**Prioridad:** Must
+**Descripción:** Como técnico de campo, quiero tocar un marker para abrir un diálogo con el carrusel de fotos, título y descripción del punto, y poder ampliar cada foto con su propia descripción.
+
+#### Criterios de Aceptación
+
+##### CA-01 MudDialog con carrusel y campos editables
+
+**Dado** que el técnico toca un marker
+**Cuando** se abre el popup
+**Entonces** aparece un MudDialog con: título editable, descripción editable del punto y FotoCarousel con todas las fotos.
+
+##### CA-02 Ampliar foto en fullscreen
+
+**Dado** que el popup está abierto y muestra fotos en el carrusel
+**Cuando** el técnico toca una foto
+**Entonces** se amplía en fullscreen usando MudOverlay.
+
+##### CA-03 Descripción por foto en fullscreen
+
+**Dado** que la foto está en modo fullscreen
+**Cuando** el técnico edita el campo de descripción
+**Entonces** puede agregar o editar una descripción individual para esa foto.
+
+##### CA-04 Persistencia de cambios
+
+**Dado** que el técnico modifica título, descripción del punto o comentarios de fotos
+**Cuando** pierde el foco del campo (on-blur)
+**Entonces** los cambios persisten en SQLite y se encolan en SyncQueue para sincronización.
+
+##### CA-05 Sin fotos: mensaje informativo
+
+**Dado** que el punto no tiene fotos asociadas
+**Cuando** se abre el popup
+**Entonces** se muestra el mensaje "Este punto no tiene fotos — usá el botón de cámara para agregar la primera."
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                                | Componente | Estimación |
+| --------- | --------------------------------------------------------------------- | ---------- | ---------- |
+| GEO-T100  | Crear/actualizar MarkerPopup.razor con título y descripción editables | Shared     | 3h         |
+| GEO-T101  | Crear/actualizar FotoCarousel.razor con prev/next y botón ✕          | Shared     | 3h         |
+| GEO-T102  | Crear FotoViewer.razor (fullscreen MudOverlay + comentario)           | Shared     | 2h         |
+| GEO-T103  | Integrar OnMarkerClick en Mapa.razor con JS Interop                   | Shared     | 2h         |
+| GEO-T104  | GuardarTituloPuntoAsync en LocalDbService                             | Mobile     | 1h         |
+| GEO-T105  | GuardarDescripcionPuntoAsync en LocalDbService                        | Mobile     | 1h         |
+| GEO-T106  | GuardarComentarioFotoAsync en LocalDbService                          | Mobile     | 1h         |
+
+---
+
+### GEO-US24: Trabajar offline y sincronizar automáticamente al recuperar red
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 07
+**Story Points:** 8
+**Prioridad:** Must
+**Descripción:** Como técnico de campo, quiero trabajar sin conexión a internet, agregar fotos a markers y que todo se sincronice automáticamente cuando haya red.
+
+#### Criterios de Aceptación
+
+##### CA-01 Funcionamiento completo offline
+
+**Dado** que el dispositivo no tiene conexión
+**Cuando** el técnico crea markers, agrega fotos o edita títulos y descripciones
+**Entonces** todas las operaciones funcionan completamente sin errores de red.
+
+##### CA-02 Sync automático al recuperar conexión
+
+**Dado** que existen operaciones Pending en SyncQueue y el dispositivo recupera conexión
+**Cuando** ConnectivityService detecta la red
+**Entonces** SyncService.PushAsync() se dispara automáticamente y sincroniza toda la cola.
+
+##### CA-03 Badge en AppBar con estado de sync
+
+**Dado** que el técnico observa la AppBar durante distintos estados
+**Cuando** hay items pendientes (offline), sincronizando o sincronizado
+**Entonces** el badge muestra: número de items pendientes (naranja), spinner (sincronizando), check verde (todo sincronizado), ícono rojo (error).
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                                | Componente | Estimación |
+| --------- | --------------------------------------------------------------------- | ---------- | ---------- |
+| GEO-T107  | Completar SyncService.PushAsync() con Create/Update/Delete Punto+Foto | Mobile     | 4h         |
+| GEO-T108  | Implementar SyncService.PullAsync() con ESC-01 (sin merge)            | Mobile     | 3h         |
+| GEO-T109  | Implementar ConflictResolver.cs (UseRemote/UseLocal/AskUser)          | Mobile     | 2h         |
+| GEO-T110  | Crear SyncController.GetDelta() en API                                | Api        | 2h         |
+| GEO-T111  | Actualizar SyncStatusBadge con 4 estados visuales                    | Shared     | 2h         |
+
+---
+
+### GEO-US25: Quitar fotos desde el carrusel del marker
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 07
+**Story Points:** 5
+**Prioridad:** Should
+**Descripción:** Como técnico de campo, quiero quitar fotos desde el carrusel del marker para corregir capturas incorrectas.
+
+#### Criterios de Aceptación
+
+##### CA-01 Botón ✕ por foto
+
+**Dado** que el carrusel del marker está abierto y tiene fotos
+**Cuando** el técnico visualiza cualquier foto
+**Entonces** cada foto tiene un botón ✕ visible.
+
+##### CA-02 Confirmación antes de eliminar
+
+**Dado** que el técnico toca el botón ✕ de una foto
+**Cuando** se dispara la acción
+**Entonces** aparece dialog de confirmación: "¿Eliminar esta foto? Esta acción no se puede deshacer."
+
+##### CA-03 Eliminación con actualización de carrusel
+
+**Dado** que el técnico confirma la eliminación
+**Cuando** se procesa la operación
+**Entonces** la foto se elimina de SQLite, se marca IsDeleted=true y se encola PendingDelete. El carrusel se actualiza sin cerrar el popup.
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                        | Componente | Estimación |
+| --------- | ------------------------------------------------------------- | ---------- | ---------- |
+| GEO-T112  | Agregar botón ✕ con confirm dialog en FotoCarousel.razor      | Shared     | 2h         |
+| GEO-T113  | Implementar EliminarFotoAsync con IsDeleted+SyncQueue         | Mobile     | 2h         |
+| GEO-T114  | Actualizar carrusel reactivamente tras eliminación            | Shared     | 1h         |
+
+---
+
+### GEO-US26: Ampliar fotos desde el carrusel para verlas en detalle
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 07
+**Story Points:** 3
+**Prioridad:** Should
+**Descripción:** Como técnico de campo, quiero ampliar fotos desde el carrusel para verlas en detalle.
+
+#### Criterios de Aceptación
+
+##### CA-01 Visor fullscreen
+
+**Dado** que el carrusel está abierto
+**Cuando** el técnico toca una foto
+**Entonces** se abre el visor fullscreen con MudOverlay.
+
+##### CA-02 Pinch-to-zoom
+
+**Dado** que la foto está en fullscreen
+**Cuando** el técnico hace pinch-to-zoom
+**Entonces** puede hacer zoom sobre la imagen.
+
+##### CA-03 Cerrar y volver al carrusel
+
+**Dado** que la foto está en fullscreen
+**Cuando** el técnico toca el botón ✕ o fuera de la imagen
+**Entonces** vuelve al carrusel en la misma posición.
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                    | Componente | Estimación |
+| --------- | --------------------------------------------------------- | ---------- | ---------- |
+| GEO-T115  | FotoViewer.razor con MudOverlay + zoom CSS/JS             | Shared     | 2h         |
+| GEO-T116  | Mantener índice de carrusel al cerrar fullscreen          | Shared     | 1h         |
+| GEO-T117  | Integrar FotoViewer en FotoCarousel.razor                 | Shared     | 1h         |
+
+---
+
+### GEO-US27: Ver el estado de sincronización e iniciarlo manualmente
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 07
+**Story Points:** 5
+**Prioridad:** Must
+**Descripción:** Como técnico de campo, quiero ver el estado de sincronización e iniciarlo manualmente cuando lo necesite.
+
+#### Criterios de Aceptación
+
+##### CA-01 Pantalla de sincronización
+
+**Dado** que el técnico navega a la pantalla Sincronización
+**Cuando** se carga la pantalla
+**Entonces** se muestra: última sincronización, items pendientes, items fallidos con motivo.
+
+##### CA-02 Sincronizar ahora
+
+**Dado** que la pantalla de sincronización está abierta
+**Cuando** el técnico toca "Sincronizar ahora"
+**Entonces** se dispara PushAsync + PullAsync manualmente.
+
+##### CA-03 Feedback durante y al terminar sync
+
+**Dado** que la sincronización está en curso
+**Cuando** el técnico observa la pantalla
+**Entonces** el botón muestra spinner y el badge en AppBar está animado.
+**Y** al terminar se actualiza la fecha/hora de última sync.
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                         | Componente | Estimación |
+| --------- | -------------------------------------------------------------- | ---------- | ---------- |
+| GEO-T118  | Crear/actualizar Sincronizacion.razor con tabla SyncQueue      | Shared     | 2h         |
+| GEO-T119  | Botón "Sincronizar ahora" con spinner + PushAsync+PullAsync    | Shared     | 2h         |
+| GEO-T120  | Mostrar fecha/hora de última sync en pantalla                  | Shared     | 1h         |
+
+---
+
+### GEO-US28: Ver la lista de todos los markers, buscarlos y editar su carrusel
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 07
+**Story Points:** 8
+**Prioridad:** Must
+**Descripción:** Como técnico de campo, quiero ver la lista de todos los markers, buscarlos y editar su carrusel desde esa pantalla.
+
+#### Criterios de Aceptación
+
+##### CA-01 Lista de markers con datos clave
+
+**Dado** que el técnico accede a la pantalla Lista de markers
+**Cuando** se carga la pantalla
+**Entonces** se muestra una lista con: nombre, coordenadas, cantidad de fotos, estado de sync (chip color).
+
+##### CA-02 Búsqueda en tiempo real
+
+**Dado** que la lista de markers está visible
+**Cuando** el técnico escribe en el campo de búsqueda
+**Entonces** la lista filtra por nombre en tiempo real sin recargar.
+
+##### CA-03 Navegar al marker y abrir popup
+
+**Dado** que el técnico toca un ítem de la lista
+**Cuando** se ejecuta la acción
+**Entonces** el mapa se centra en ese marker Y se abre el popup.
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                         | Componente | Estimación |
+| --------- | -------------------------------------------------------------- | ---------- | ---------- |
+| GEO-T121  | Crear/actualizar ListaPuntos.razor con MudTable y chips sync   | Shared     | 2h         |
+| GEO-T122  | Campo de búsqueda MudTextField con filtrado reactivo           | Shared     | 1h         |
+| GEO-T123  | Tap en fila → navegar mapa + abrir popup MarkerPopup           | Shared     | 2h         |
+| GEO-T124  | GetAllPuntosAsync ordenado por nombre en LocalDbService        | Mobile     | 1h         |
+
+---
+
+### GEO-US29: Eliminar un marker con todas sus fotos
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 07
+**Story Points:** 5
+**Prioridad:** Should
+**Descripción:** Como técnico de campo, quiero poder eliminar un marker (con todas sus fotos) al seleccionarlo.
+
+#### Criterios de Aceptación
+
+##### CA-01 Botón Eliminar marker en popup
+
+**Dado** que el popup del marker está abierto
+**Cuando** el técnico observa las opciones disponibles
+**Entonces** hay un botón "Eliminar marker" visible.
+
+##### CA-02 Confirmación con conteo de fotos
+
+**Dado** que el técnico toca "Eliminar marker"
+**Cuando** se abre el dialog de confirmación
+**Entonces** se muestra: "¿Eliminar este marker y sus N fotos? Esta acción no se puede deshacer."
+
+##### CA-03 Eliminación completa y encolada
+
+**Dado** que el técnico confirma la eliminación
+**Cuando** se procesa la operación
+**Entonces** se elimina PuntoLocal + FotoLocal[] de SQLite, se quita el marker del mapa, se encola PendingDelete en SyncQueue.
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                         | Componente | Estimación |
+| --------- | -------------------------------------------------------------- | ---------- | ---------- |
+| GEO-T125  | Botón "Eliminar marker" en MarkerPopup.razor con confirm dialog| Shared     | 2h         |
+| GEO-T126  | EliminarPuntoConFotosAsync en LocalDbService                   | Mobile     | 2h         |
+| GEO-T127  | Quitar marker del mapa vía leaflet-interop.removeMarker()      | Shared     | 1h         |
+
+---
+
+### GEO-US30: Compartir fotos del carrusel a través de apps del dispositivo
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 08
+**Story Points:** 5
+**Prioridad:** Could
+**Descripción:** Como técnico de campo, quiero compartir una o más fotos del carrusel a través de apps del dispositivo (WhatsApp, email, etc.).
+
+#### Criterios de Aceptación
+
+##### CA-01 Botón Compartir por foto
+
+**Dado** que el carrusel está abierto
+**Cuando** el técnico observa las opciones por foto
+**Entonces** cada foto tiene un botón "Compartir".
+
+##### CA-02 Share API nativa
+
+**Dado** que el técnico toca "Compartir" en una foto
+**Cuando** se ejecuta la acción
+**Entonces** se invoca la Share API nativa de Android con la foto seleccionada.
+
+##### CA-03 Share no disponible
+
+**Dado** que el sistema de compartir no está disponible en el dispositivo
+**Cuando** el técnico toca "Compartir"
+**Entonces** se muestra snackbar info: "Función no disponible en este dispositivo."
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                         | Componente | Estimación |
+| --------- | -------------------------------------------------------------- | ---------- | ---------- |
+| GEO-T128  | Agregar botón "Compartir" en FotoCarousel.razor                | Shared     | 1h         |
+| GEO-T129  | Implementar MauiShareService con Share.RequestAsync()          | Mobile     | 2h         |
+| GEO-T130  | Manejar caso Share no disponible con snackbar info             | Shared     | 1h         |
+
+---
+
+### GEO-US31: En la web, la misma experiencia de mapa que en Android
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 08
+**Story Points:** 5
+**Prioridad:** Must
+**Descripción:** Como supervisor, quiero en la web la misma experiencia de mapa que en Android: centrar en mi posición, ver mi ubicación, gestionar markers, carrusel, editar títulos y descripciones, quitar fotos, ampliar fotos, ver lista de markers y eliminar markers. Los permisos de ubicación se solicitan al navegador (Geolocation API del browser).
+
+#### Criterios de Aceptación
+
+##### CA-01 Centrado con Geolocation API del browser
+
+**Dado** que el supervisor está en la web y el browser tiene permiso de geolocation
+**Cuando** toca el botón de centrar mapa
+**Entonces** se usa navigator.geolocation del browser para centrar el mapa.
+
+##### CA-02 Permiso de browser denegado
+
+**Dado** que el browser deniega la geolocation
+**Cuando** el supervisor intenta centrar el mapa
+**Entonces** se muestra: "Permiso de ubicación denegado en el navegador. Habilitalo desde la configuración del sitio."
+
+##### CA-03 Paridad funcional con Android
+
+**Dado** que el supervisor usa la web
+**Cuando** interactúa con markers, carrusel y lista
+**Entonces** toda la funcionalidad de marker popup (título, descripción, carrusel, ampliar, quitar, eliminar marker) es idéntica a Android.
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                              | Componente | Estimación |
+| --------- | ------------------------------------------------------------------- | ---------- | ---------- |
+| GEO-T131  | Agregar navigator.geolocation en leaflet-interop.js para web        | Shared     | 2h         |
+| GEO-T132  | Manejar permiso browser denegado con mensaje informativo            | Shared     | 1h         |
+| GEO-T133  | Verificar que todos los componentes Shared funcionan en GeoFoto.Web | Web        | 2h         |
+
+---
+
+### GEO-US32: Descargar localmente todas las fotos de un marker en un zip
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 08
+**Story Points:** 5
+**Prioridad:** Must
+**Descripción:** Como supervisor, quiero descargar localmente todas las fotos de un marker en un zip.
+
+#### Criterios de Aceptación
+
+##### CA-01 Botón Descargar fotos en popup web
+
+**Dado** que el popup del marker está abierto en la web
+**Cuando** el supervisor observa las opciones
+**Entonces** hay un botón "Descargar fotos" visible.
+
+##### CA-02 Descarga del zip con nombres descriptivos
+
+**Dado** que el supervisor toca "Descargar fotos"
+**Cuando** se procesa la operación
+**Entonces** se genera un archivo .zip con todas las fotos nombradas como {nombrePunto}_{n}.jpg y se descarga al navegador.
+
+##### CA-03 Botón deshabilitado sin fotos
+
+**Dado** que el punto no tiene fotos asociadas
+**Cuando** el popup está abierto en la web
+**Entonces** el botón "Descargar fotos" está deshabilitado.
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                              | Componente | Estimación |
+| --------- | ------------------------------------------------------------------- | ---------- | ---------- |
+| GEO-T134  | Crear endpoint GET /api/puntos/{id}/fotos/download (zip)            | Api        | 3h         |
+| GEO-T135  | Botón "Descargar fotos" en MarkerPopup.razor (IsMobile=false)       | Shared     | 1h         |
+| GEO-T136  | Disparar descarga browser vía JS Interop desde Blazor               | Shared     | 1h         |
+
+---
+
+### GEO-US33: Subir fotos al carrusel de un marker existente desde el navegador
+
+**Épica padre:** GEO-E07
+**Sprint asignado:** Sprint 08
+**Story Points:** 5
+**Prioridad:** Must
+**Descripción:** Como supervisor, quiero subir fotos al carrusel de un marker existente desde el navegador, aunque no tengan datos GPS.
+
+#### Criterios de Aceptación
+
+##### CA-01 MudFileUpload en popup web
+
+**Dado** que el popup del marker está abierto en la web
+**Cuando** el supervisor toca "Agregar foto"
+**Entonces** se abre MudFileUpload para seleccionar una foto.
+
+##### CA-02 Foto vinculada al marker por PuntoId
+
+**Dado** que el supervisor sube una foto (con o sin EXIF GPS)
+**Cuando** se sube al servidor
+**Entonces** la foto se asocia al marker por PuntoId sin mostrar error por falta de coordenadas.
+
+##### CA-03 Carrusel actualizado inmediatamente
+
+**Dado** que la foto se subió exitosamente
+**Cuando** se completa la operación
+**Entonces** el carrusel se actualiza inmediatamente mostrando la foto recién subida.
+
+##### CA-04 Sin error por falta de EXIF GPS (ESC-04)
+
+**Dado** que la foto no tiene EXIF GPS
+**Cuando** se sube desde la web
+**Entonces** no se muestra error — la foto queda vinculada al marker por PuntoId.
+
+#### Tareas Técnicas Hijas
+
+| ID Jira   | Título                                                              | Componente | Estimación |
+| --------- | ------------------------------------------------------------------- | ---------- | ---------- |
+| GEO-T137  | MudFileUpload en MarkerPopup.razor (IsMobile=false) + POST upload   | Shared     | 2h         |
+| GEO-T138  | Endpoint POST /api/fotos/upload con puntoId sin requerir EXIF GPS   | Api        | 2h         |
+| GEO-T139  | Actualizar carrusel tras subida exitosa (recargar fotos del punto)  | Shared     | 1h         |
+
+---
+
 # 5. Trazabilidad
 
 | Documento                                                          | Relación                                       |
@@ -873,9 +1452,10 @@ Cada historia incluye criterios de aceptación en formato Given-When-Then (Dado-
 
 # 6. Control de Cambios
 
-| Versión | Fecha      | Autor          | Cambios                                  |
-| ------- | ---------- | -------------- | ---------------------------------------- |
-| 1.0     | 2026-04-13 | Equipo Técnico | Creación inicial del backlog de producto |
+| Versión | Fecha      | Autor          | Cambios                                                                                                   |
+| ------- | ---------- | -------------- | --------------------------------------------------------------------------------------------------------- |
+| 1.0     | 2026-04-13 | Equipo Técnico | Creación inicial del backlog de producto                                                                  |
+| 1.1     | 2026-04-16 | Equipo Técnico | Agregada épica GEO-E07 con historias GEO-US20b a GEO-US33 (Sprint 07-08). Tareas GEO-T89 a GEO-T139.    |
 
 ---
 

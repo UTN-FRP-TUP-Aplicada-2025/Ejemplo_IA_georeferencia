@@ -150,6 +150,9 @@ else
     private IRadioAssociationService? _radioService;
     private int? _marcadorActivoId; // LocalId del marker seleccionado (MEJORA 3)
 
+    // GEO-US21 — Polling de posición propia cada 5 segundos
+    private CancellationTokenSource? _posicionCts;
+
     [SupplyParameterFromQuery(Name = "t")]
     public string? RefreshToken { get; set; }
 
@@ -255,6 +258,9 @@ else
                 await JS.InvokeVoidAsync("leafletInterop.mostrarPosicionGps",
                     _gpsInicial.Latitud, _gpsInicial.Longitud, _gpsInicial.Precision);
             }
+
+            // GEO-US21: Iniciar polling de posición propia cada 5s
+            IniciarPollingPosicion();
             // Si GPS aún no llegó (timeout), el else-if de abajo lo centra
             // cuando ObtenerGpsInicialAsync dispare StateHasChanged
         }
@@ -504,7 +510,7 @@ else
     [JSInvokable]
     public async Task OnMarkerClicked(int puntoId)
     {
-        _marcadorActivoId = puntoId; // MEJORA 3: tracking del marker activo
+        _marcadorActivoId = puntoId;
         var options = new DialogOptions
         {
             MaxWidth = MaxWidth.Medium,
@@ -515,13 +521,25 @@ else
         IDialogReference dialog;
         if (_usarDatosLocales)
         {
-            var localParameters = new DialogParameters<GeoFoto.Shared.Components.DetallePuntoLocal>
+            // GEO-US23: usar MarkerPopup (cross-platform, soporta US25/26/29)
+            var localParameters = new DialogParameters<GeoFoto.Shared.Components.MarkerPopup>
             {
-                { x => x.PuntoLocalId, puntoId }
+                { x => x.PuntoLocalId, puntoId },
+                { x => x.IsMobile, _esMovil },
+                { x => x.OnEliminarMarker, EventCallback.Factory.Create(this, async () =>
+                    {
+                        // GEO-US29: quitar el pin del mapa en tiempo real
+                        if (_mapaListo)
+                            await JS.InvokeVoidAsync("leafletInterop.removeMarker", puntoId);
+                        await CargarPuntosAsync();
+                        if (_mapaListo)
+                            await JS.InvokeVoidAsync("leafletInterop.addMarkers", _puntos, _dotnetRef, false);
+                    })
+                }
             };
 
-            dialog = await DialogService.ShowAsync<GeoFoto.Shared.Components.DetallePuntoLocal>(
-                "Detalle del Punto", localParameters, options);
+            dialog = await DialogService.ShowAsync<GeoFoto.Shared.Components.MarkerPopup>(
+                "", localParameters, options);
         }
         else
         {
@@ -535,13 +553,11 @@ else
         }
 
         var result = await dialog.Result;
-        if (result is not null && !result.Canceled)
+        if (result is not null && !result.Canceled && result.Data is not "deleted")
         {
             await CargarPuntosAsync();
             if (_mapaListo)
-            {
                 await JS.InvokeVoidAsync("leafletInterop.addMarkers", _puntos, _dotnetRef, false);
-            }
         }
     }
 
@@ -751,8 +767,58 @@ else
         }
     }
 
+    // GEO-US21 — Inicia el polling de posición propia cada 5 segundos
+    private void IniciarPollingPosicion()
+    {
+        if (_ubicacionService is null || _posicionCts is not null) return;
+        _posicionCts = new CancellationTokenSource();
+        var token = _posicionCts.Token;
+        _ = Task.Run(async () =>
+        {
+            while (!token.IsCancellationRequested)
+            {
+                try
+                {
+                    await Task.Delay(5000, token);
+                    if (token.IsCancellationRequested) break;
+
+                    var result = await _ubicacionService.ObtenerUbicacionAsync();
+                    if (result.Ok)
+                    {
+                        await InvokeAsync(async () =>
+                        {
+                            if (_mapaListo)
+                                await JS.InvokeVoidAsync("leafletInterop.updateUserPosition",
+                                    result.Latitud, result.Longitud);
+                        });
+                    }
+                    else if (!result.Ok && !result.PermisoDenegado)
+                    {
+                        // GPS perdido — limpiar marcador de posición
+                        await InvokeAsync(async () =>
+                        {
+                            if (_mapaListo)
+                            {
+                                await JS.InvokeVoidAsync("leafletInterop.clearUserPosition");
+                                Snackbar.Add("Sin señal GPS", Severity.Warning,
+                                    cfg => { cfg.VisibleStateDuration = 3000; });
+                            }
+                        });
+                    }
+                }
+                catch (TaskCanceledException) { break; }
+                catch (Exception ex)
+                {
+                    Logger.LogWarning(ex, "Error en polling de posición GPS");
+                }
+            }
+        }, token);
+    }
+
     public void Dispose()
     {
+        _posicionCts?.Cancel();
+        _posicionCts?.Dispose();
         _dotnetRef?.Dispose();
     }
 }

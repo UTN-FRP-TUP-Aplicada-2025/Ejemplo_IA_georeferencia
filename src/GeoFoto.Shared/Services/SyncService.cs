@@ -293,6 +293,25 @@ public class SyncService : ISyncService
                     local.SyncStatus = SyncStatusValues.Synced;
                     await _localDb.UpdatePuntoAsync(local);
                 }
+                else if (local.SyncStatus == SyncStatusValues.PendingUpdate)
+                {
+                    // LWW: server wins only when its UpdatedAt is strictly newer than local
+                    if (remotePunto.UpdatedAt.HasValue &&
+                        DateTime.TryParse(local.UpdatedAt, null,
+                            System.Globalization.DateTimeStyles.RoundtripKind,
+                            out var localTime) &&
+                        remotePunto.UpdatedAt.Value > localTime)
+                    {
+                        // Server version is newer → apply server data and mark as Conflict
+                        local.Nombre = remotePunto.Nombre;
+                        local.Descripcion = remotePunto.Descripcion;
+                        local.Latitud = remotePunto.Latitud;
+                        local.Longitud = remotePunto.Longitud;
+                        local.SyncStatus = SyncStatusValues.Conflict;
+                        await _localDb.UpdatePuntoAsync(local);
+                    }
+                    // else: local changes are newer or server has no timestamp → local wins
+                }
             }
 
             // Process fotos

@@ -2,9 +2,9 @@
 
 **Proyecto:** GeoFoto — Registro Georeferenciado de Fotografías Offline-First  
 **Documento:** backlog-tecnico_v1.0.md  
-**Versión:** 1.0  
-**Estado:** Borrador  
-**Fecha:** 2026-04-13  
+**Versión:** 1.1  
+**Estado:** Activo  
+**Fecha:** 2026-04-16  
 **Autor:** Equipo Técnico  
 
 ---
@@ -273,6 +273,157 @@ El objetivo es proporcionar al equipo de desarrollo una guía detallada de imple
 
 ---
 
+# ÉPICA GEO-E07 — UX Avanzado Mobile + Web
+
+## GEO-US20b — Centrar mapa en posición GPS (5 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T89  | Agregar FAB GPS en Mapa.razor con lógica de centrado (setView 15) | Shared | 2h | To Do |
+| GEO-T90  | Implementar timeout 10s en GetCurrentLocationAsync | Mobile | 2h | To Do |
+| GEO-T91  | ESC-02: mostrar div de error con botón Reintentar si initMap falla | Shared | 2h | To Do |
+| GEO-T92  | ESC-03: manejar 3 casos de permiso GPS (dialog/snackbar/mapa sin GPS) | Mobile | 3h | To Do |
+
+---
+
+## GEO-US21 — Posición propia en mapa (5 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T93  | updateUserPosition(lat,lng) en leaflet-interop.js con circleMarker pulsante | Shared | 2h | To Do |
+| GEO-T94  | clearUserPosition() en leaflet-interop.js | Shared | 1h | To Do |
+| GEO-T95  | Polling de posición cada 5s en Mapa.razor con clearUserPosition al perder GPS | Shared | 2h | To Do |
+
+---
+
+## GEO-US22 — Radio visual del marker (8 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T96  | showMarkerRadius/hideMarkerRadius/updateMarkerRadius en leaflet-interop.js | Shared | 3h | To Do |
+| GEO-T97  | MudSlider (10-500m) en MarkerPopup.razor con handler de cambio | Shared | 2h | To Do |
+| GEO-T98  | UpdatePuntoRadioAsync(puntoId, radioMetros) en LocalDbService | Mobile | 2h | To Do |
+| GEO-T99  | Persistir radio en IPreferencesService y leer al iniciar | Mobile | 1h | To Do |
+
+---
+
+## GEO-US23 — Popup + carrusel + ampliar foto (13 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T100 | Crear/actualizar MarkerPopup.razor (título, descripción, carrusel, botones) | Shared | 3h | To Do |
+| GEO-T101 | Crear/actualizar FotoCarousel.razor (prev/next, botón ✕, mensaje sin fotos) | Shared | 3h | To Do |
+| GEO-T102 | Crear FotoViewer.razor (fullscreen MudOverlay + comentario editable + ✕) | Shared | 2h | To Do |
+| GEO-T103 | Integrar OnMarkerClick JS→Blazor en Mapa.razor para abrir MarkerPopup | Shared | 2h | To Do |
+| GEO-T104 | GuardarTituloPuntoAsync en LocalDbService + SyncQueue PendingUpdate | Mobile | 1h | To Do |
+| GEO-T105 | GuardarDescripcionPuntoAsync en LocalDbService + SyncQueue | Mobile | 1h | To Do |
+| GEO-T106 | GuardarComentarioFotoAsync en LocalDbService + SyncQueue | Mobile | 1h | To Do |
+
+---
+
+## GEO-US24 — Offline-first + sync automático (8 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T107 | Completar SyncService.PushAsync() con Update Punto/Foto y Delete Punto/Foto | Mobile | 4h | To Do |
+| GEO-T108 | Implementar SyncService.PullAsync() + ESC-01 (insertar superpuestos sin merge) | Mobile | 3h | To Do |
+| GEO-T109 | ConflictResolver.cs (UseRemote/UseLocal + AskUser → MudDialog) | Mobile | 2h | To Do |
+| GEO-T110 | GET /api/sync/delta?since={utc} en SyncController con IsDeleted | Api | 2h | To Do |
+| GEO-T111 | Actualizar SyncStatusBadge: Pending(nro naranja)/Syncing(spinner)/OK(verde)/Error(rojo) | Shared | 2h | To Do |
+
+---
+
+## GEO-US25 — Quitar foto desde carrusel (5 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T112 | Botón ✕ en FotoCarousel.razor con confirm dialog ("¿Eliminar esta foto?") | Shared | 2h | To Do |
+| GEO-T113 | EliminarFotoAsync: IsDeleted=true + SyncQueue PendingDelete | Mobile | 2h | To Do |
+| GEO-T114 | Actualizar carrusel reactivamente tras eliminación sin cerrar popup | Shared | 1h | To Do |
+
+---
+
+## GEO-US26 — Ampliar foto fullscreen (3 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T115 | FotoViewer.razor con MudOverlay + pinch-to-zoom CSS/JS | Shared | 2h | To Do |
+| GEO-T116 | Mantener índice de carrusel al cerrar FotoViewer | Shared | 1h | To Do |
+| GEO-T117 | Integrar FotoViewer en FotoCarousel.razor con tap en imagen | Shared | 1h | To Do |
+
+---
+
+## GEO-US27 — Pantalla sincronización manual (5 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T118 | Crear/actualizar Sincronizacion.razor con MudTable de SyncQueue | Shared | 2h | To Do |
+| GEO-T119 | Botón "Sincronizar ahora" con spinner + PushAsync+PullAsync | Shared | 2h | To Do |
+| GEO-T120 | Mostrar y actualizar fecha/hora de última sync en pantalla | Shared | 1h | To Do |
+
+---
+
+## GEO-US28 — Lista de markers con búsqueda (8 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T121 | Crear/actualizar ListaPuntos.razor con MudTable y MudChip SyncStatus | Shared | 2h | To Do |
+| GEO-T122 | MudTextField de búsqueda con filtrado reactivo en tiempo real | Shared | 1h | To Do |
+| GEO-T123 | Tap en fila → navegar mapa (setView) + abrir MarkerPopup | Shared | 2h | To Do |
+| GEO-T124 | GetAllPuntosAsync ordenado por nombre en LocalDbService | Mobile | 1h | To Do |
+
+---
+
+## GEO-US29 — Eliminar marker completo (5 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T125 | Botón "Eliminar marker" en MarkerPopup.razor con confirm (N fotos) | Shared | 2h | To Do |
+| GEO-T126 | EliminarPuntoConFotosAsync en LocalDbService (soft delete + SyncQueue) | Mobile | 2h | To Do |
+| GEO-T127 | removeMarker(puntoId) en leaflet-interop.js | Shared | 1h | To Do |
+
+---
+
+## GEO-US30 — Compartir foto nativa Android (5 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T128 | Botón "Compartir" en FotoCarousel.razor (solo Mobile) | Shared | 1h | To Do |
+| GEO-T129 | Implementar MauiShareService con Share.RequestAsync(file) | Mobile | 2h | To Do |
+| GEO-T130 | Manejar Share no disponible con MudSnackbar info | Shared | 1h | To Do |
+
+---
+
+## GEO-US31 — Web: paridad funcional con Android (5 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T131 | navigator.geolocation en leaflet-interop.js para web + manejo de denegación | Shared | 2h | To Do |
+| GEO-T132 | Mensaje "Permiso de ubicación denegado..." cuando browser deniega | Shared | 1h | To Do |
+| GEO-T133 | Verificar componentes Shared (Popup, Carrusel, Viewer) en GeoFoto.Web | Web | 2h | To Do |
+
+---
+
+## GEO-US32 — Descarga zip de fotos del marker (5 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T134 | GET /api/puntos/{id}/fotos/download retorna .zip con fotos nombradas | Api | 3h | To Do |
+| GEO-T135 | Botón "Descargar fotos" en MarkerPopup.razor (IsMobile=false, disabled si sin fotos) | Shared | 1h | To Do |
+| GEO-T136 | JS Interop para disparar descarga browser desde Blazor | Shared | 1h | To Do |
+
+---
+
+## GEO-US33 — Subir foto desde web al marker (5 pts)
+
+| ID Jira  | Título | Componente | Estimación | Estado |
+|----------|--------|------------|------------|--------|
+| GEO-T137 | MudFileUpload en MarkerPopup.razor (IsMobile=false) + POST /api/fotos/upload | Shared | 2h | To Do |
+| GEO-T138 | Endpoint POST /api/fotos/upload acepta puntoId sin requerir EXIF GPS (ESC-04) | Api | 2h | To Do |
+| GEO-T139 | Recargar fotos del punto en carrusel tras subida exitosa | Shared | 1h | To Do |
+
+---
+
 ## Resumen por componente
 
 | Componente | Cantidad de tareas | Total horas |
@@ -285,6 +436,8 @@ El objetivo es proporcionar al equipo de desarrollo una guía detallada de imple
 | DevOps | 6 | 10h |
 | Testing | 9 | 18h |
 | **Total** | **88** | **166h** |
+
+> **Nota:** Las tareas GEO-T89 a GEO-T139 corresponden a la épica GEO-E07 (Sprint 07-08). Ver sección anterior.
 
 ---
 
@@ -307,6 +460,7 @@ El objetivo es proporcionar al equipo de desarrollo una guía detallada de imple
 | Versión | Fecha | Autor | Descripción |
 |---------|-------|-------|-------------|
 | 1.0 | 2026-04-13 | Equipo Técnico | Creación inicial del backlog técnico con 88 tareas distribuidas en 6 épicas y 20 historias de usuario. |
+| 1.1 | 2026-04-16 | Equipo Técnico | Agregada épica GEO-E07 con 51 tareas (GEO-T89 a GEO-T139) para historias GEO-US20b a GEO-US33 (Sprint 07-08). |
 
 ---
 

@@ -10,6 +10,8 @@ public class Foto
     public long TamanoBytes { get; set; }
     public decimal? LatitudExif { get; set; }
     public decimal? LongitudExif { get; set; }
+    public string? Comentario { get; set; }
+    public bool IsDeleted { get; set; } = false;
     public DateTime UpdatedAt { get; set; }
     public Punto Punto { get; set; } = null!;
 }

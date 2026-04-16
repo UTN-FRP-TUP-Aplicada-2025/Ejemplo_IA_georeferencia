@@ -36,4 +36,14 @@ public class PuntosController : ControllerBase
         var ok = await _svc.DeleteAsync(id, ct);
         return ok ? NoContent() : NotFound();
     }
+
+    // GEO-US32: Descargar todas las fotos de un punto como ZIP
+    [HttpGet("{id:int}/fotos/download")]
+    public async Task<IActionResult> DescargarFotosZip(int id, CancellationToken ct)
+    {
+        var result = await _svc.DescargarFotosZipAsync(id, ct);
+        if (result is null) return NotFound();
+        if (result.Value.ZipBytes.Length == 0) return NoContent();
+        return File(result.Value.ZipBytes, "application/zip", result.Value.FileName);
+    }
 }

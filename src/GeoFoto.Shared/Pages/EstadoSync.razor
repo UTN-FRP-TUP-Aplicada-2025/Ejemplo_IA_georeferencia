@@ -2,6 +2,7 @@
 @attribute [StreamRendering]
 @using Microsoft.Extensions.DependencyInjection
 @inject IServiceProvider SP
+@inject ISnackbar Snackbar
 
 <MudContainer MaxWidth="MaxWidth.Medium" Class="mt-4">
     <MudText Typo="Typo.h5" GutterBottom="true">Estado de sincronización</MudText>
@@ -33,6 +34,11 @@
                 <MudText Typo="Typo.caption">@(_conectado ? "Conectado" : "Sin conexión")</MudText>
             </MudPaper>
         </div>
+
+        @* Última sincronización — GEO-US27 CA-04 *@
+        <MudText Typo="Typo.caption" Color="Color.Secondary" Class="mb-2">
+            Última sincronización: <strong>@_ultimaSync</strong>
+        </MudText>
 
         <MudTooltip Text="@(!_conectado ? "Necesitás conexión para sincronizar" : "")"
                     Disabled="_conectado">
@@ -97,19 +103,25 @@
 </MudContainer>
 
 @code {
+    private const string PrefKeyLastSync = "LastSyncAt";
+
     private ILocalDbService? _localDb;
     private IConnectivityService? _connectivity;
     private ISyncService? _syncService;
+    private IPreferencesService? _prefs;
     private int _pendientes, _sincronizados, _fallidos;
     private bool _conectado, _sincronizando;
     private List<SyncQueueItem> _operaciones = new();
+    private string _ultimaSync = "Nunca";
 
     protected override async Task OnInitializedAsync()
     {
         _localDb = SP.GetService<ILocalDbService>();
         _connectivity = SP.GetService<IConnectivityService>();
         _syncService = SP.GetService<ISyncService>();
+        _prefs = SP.GetService<IPreferencesService>();
         _conectado = _connectivity?.IsConnected ?? true;
+        _ultimaSync = FormatUltimaSync(_prefs?.Get(PrefKeyLastSync, "") ?? "");
         await CargarDatos();
     }
 
@@ -129,10 +141,24 @@
         try
         {
             await _syncService.SyncNowAsync();
+            var ahora = DateTime.UtcNow.ToString("O");
+            _prefs?.Set(PrefKeyLastSync, ahora);
+            _ultimaSync = FormatUltimaSync(ahora);
             await CargarDatos();
         }
-        catch (Exception) { /* errors shown via SyncCompleted event */ }
+        catch (Exception ex)
+        {
+            Snackbar.Add($"Error al sincronizar: {ex.Message}", Severity.Error);
+        }
         finally { _sincronizando = false; }
+    }
+
+    private static string FormatUltimaSync(string? iso)
+    {
+        if (string.IsNullOrWhiteSpace(iso)) return "Nunca";
+        return DateTime.TryParse(iso, out var dt)
+            ? dt.ToLocalTime().ToString("dd/MM/yyyy HH:mm")
+            : "Nunca";
     }
 
     private Color ColorDeEstado(string status) => status switch

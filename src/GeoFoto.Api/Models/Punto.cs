@@ -7,6 +7,8 @@ public class Punto
     public decimal Longitud { get; set; }
     public string? Nombre { get; set; }
     public string? Descripcion { get; set; }
+    public double RadioMetros { get; set; } = 50;
+    public bool IsDeleted { get; set; } = false;
     public DateTime FechaCreacion { get; set; }
     public DateTime UpdatedAt { get; set; }
     public ICollection<Foto> Fotos { get; set; } = new List<Foto>();

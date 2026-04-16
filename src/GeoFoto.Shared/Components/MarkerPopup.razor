@@ -1,0 +1,573 @@
+@using System.Text.Json
+@using GeoFoto.Shared.Models
+@using GeoFoto.Shared.Services
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceProvider SP
+@inject ISnackbar Snackbar
+@inject IDialogService Dialog
+@inject IJSRuntime JS
+
+@* ── GEO-US23: Popup de marker con carrusel editable ───────────────────────
+   Parámetros:
+     PuntoLocalId  — LocalId del punto a mostrar
+     IsMobile      — true → agrega foto con cámara; false → MudFileUpload web
+     OnEliminarMarker — callback para borrar el marker del mapa
+*@
+
+<MudDialog>
+    <TitleContent>
+        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+            <MudIcon Icon="@Icons.Material.Filled.Place" Class="mr-1" />
+            <MudText Typo="Typo.h6">@(_nombre ?? $"Punto #{PuntoLocalId}")</MudText>
+        </MudStack>
+    </TitleContent>
+
+    <DialogContent>
+        @if (_loading)
+        {
+            <MudProgressCircular Indeterminate="true" Class="d-block mx-auto my-4" />
+        }
+        else if (_punto is null)
+        {
+            <MudAlert Severity="Severity.Error">No se encontró el punto.</MudAlert>
+        }
+        else
+        {
+            @* ── Carrusel de fotos ── *@
+            @if (_fotos.Count == 0)
+            {
+                <MudAlert Severity="Severity.Info" Dense="true" Class="mb-3">
+                    Este punto no tiene fotos — usá el botón de cámara para agregar la primera.
+                </MudAlert>
+            }
+            else
+            {
+                @* Imagen principal *@
+                <div style="position:relative; cursor:pointer;"
+                     @onclick="() => AbrirVisorAsync(_indiceFoto)">
+                    <MudImage Src="@_fotos[_indiceFoto].DataUrl"
+                              Alt="@_fotos[_indiceFoto].NombreArchivo"
+                              ObjectFit="ObjectFit.Cover"
+                              Style="width:100%;height:220px;border-radius:8px;" />
+
+                    @* Contador *@
+                    <div style="position:absolute;bottom:8px;right:8px;
+                                background:rgba(0,0,0,.55);color:white;
+                                padding:3px 8px;border-radius:12px;font-size:12px;">
+                        📷 @_fotos.Count foto(s)
+                    </div>
+
+                    @* Botón eliminar foto — GEO-US25 CA-01 *@
+                    <span style="position:absolute;top:6px;right:6px;"
+                          @onclick:stopPropagation="true">
+                        <MudIconButton Icon="@Icons.Material.Filled.Close"
+                                       Size="Size.Small"
+                                       Style="background:rgba(220,53,69,.85);color:white;
+                                              border-radius:50%;padding:4px;"
+                                       OnClick="PedirConfirmacionEliminarFoto" />
+                    </span>
+
+                    @* Flechas nav *@
+                    @if (_indiceFoto > 0)
+                    {
+                        <span style="position:absolute;left:4px;top:50%;transform:translateY(-50%);"
+                              @onclick:stopPropagation="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.ChevronLeft"
+                                           Style="background:rgba(0,0,0,.45);color:white;border-radius:50%;"
+                                           OnClick="() => _indiceFoto--" />
+                        </span>
+                    }
+                    @if (_indiceFoto < _fotos.Count - 1)
+                    {
+                        <span style="position:absolute;right:32px;top:50%;transform:translateY(-50%);"
+                              @onclick:stopPropagation="true">
+                            <MudIconButton Icon="@Icons.Material.Filled.ChevronRight"
+                                           Style="background:rgba(0,0,0,.45);color:white;border-radius:50%;"
+                                           OnClick="() => _indiceFoto++" />
+                        </span>
+                    }
+                </div>
+
+                @* Tira de miniaturas *@
+                @if (_fotos.Count > 1)
+                {
+                    <div style="display:flex;gap:6px;overflow-x:auto;padding:8px 0 2px;scrollbar-width:thin;">
+                        @foreach (var (foto, i) in _fotos.Select((f, i) => (f, i)))
+                        {
+                            var idx = i;
+                            <div style="flex-shrink:0;width:52px;height:52px;border-radius:6px;overflow:hidden;
+                                        border:2px solid @(idx==_indiceFoto ? "var(--mud-palette-primary)" : "transparent");cursor:pointer;"
+                                 @onclick="() => _indiceFoto = idx">
+                                <MudImage Src="@foto.DataUrl" ObjectFit="ObjectFit.Cover" Style="width:100%;height:100%;" />
+                            </div>
+                        }
+                    </div>
+                }
+
+                @* Confirmación eliminar foto — GEO-US25 CA-02 *@
+                @if (_confirmarEliminarFoto)
+                {
+                    <MudAlert Severity="Severity.Warning" Dense="true" Class="mt-2"
+                              ContentAlignment="HorizontalAlignment.Left">
+                        <MudStack Row="true" AlignItems="AlignItems.Center" Spacing="1">
+                            <MudText Typo="Typo.body2" Style="flex:1;">
+                                ¿Eliminar esta foto? Esta acción no se puede deshacer.
+                            </MudText>
+                            <MudButton Size="Size.Small" Color="Color.Error"
+                                       Variant="Variant.Filled"
+                                       OnClick="ConfirmarEliminarFotoAsync">
+                                Eliminar
+                            </MudButton>
+                            <MudButton Size="Size.Small"
+                                       OnClick="() => _confirmarEliminarFoto = false">
+                                Cancelar
+                            </MudButton>
+                        </MudStack>
+                    </MudAlert>
+                }
+
+                @* Comentario de la foto actual *@
+                <MudTextField @bind-Value="_comentarioFotoActual"
+                              Label="Comentario de la foto"
+                              Placeholder="Agregar descripción de la foto..."
+                              Variant="Variant.Outlined"
+                              Margin="Margin.Dense"
+                              Class="mt-2"
+                              @onblur="GuardarComentarioFotoAsync" />
+            }
+
+            @* Visor fullscreen *@
+            @if (_visorAbierto && _fotos.Count > 0)
+            {
+                <FotoViewer Foto="@_fotos[_indiceFoto].Origen"
+                            DataUrl="@_fotos[_indiceFoto].DataUrl"
+                            IndiceActual="@_indiceFoto"
+                            TotalFotos="@_fotos.Count"
+                            OnCerrar="@CerrarVisor" />
+            }
+
+            @* ── Campos editables del punto ── *@
+            <MudDivider Class="my-3" />
+
+            <MudTextField @bind-Value="_nombre"
+                          Label="Nombre del punto"
+                          Variant="Variant.Outlined"
+                          Margin="Margin.Dense"
+                          Class="mb-2" />
+
+            <MudTextField @bind-Value="_descripcion"
+                          Label="Descripción"
+                          Placeholder="Descripción (opcional)"
+                          Variant="Variant.Outlined"
+                          Lines="2"
+                          Margin="Margin.Dense" />
+
+            @* ── Agregar foto ── *@
+            <MudDivider Class="my-3" />
+
+            @if (!IsMobile)
+            {
+                @* Web: MudFileUpload *@
+                <MudFileUpload T="IReadOnlyList<IBrowserFile>"
+                               FilesChanged="OnAgregarFotos"
+                               Accept=".jpg,.jpeg,.png,.webp"
+                               MaximumFileCount="10"
+                               Disabled="_procesando">
+                    <ChildContent>
+                        <MudButton HtmlTag="label"
+                                   Variant="Variant.Outlined"
+                                   Color="Color.Primary"
+                                   StartIcon="@Icons.Material.Filled.AddPhotoAlternate"
+                                   Disabled="_procesando"
+                                   Size="Size.Small">
+                            @(_procesando ? "Subiendo..." : "Agregar fotos")
+                        </MudButton>
+                    </ChildContent>
+                </MudFileUpload>
+            }
+            else
+            {
+                @* Mobile: botón cámara (ICamaraService) *@
+                <MudButton Variant="Variant.Outlined"
+                           Color="Color.Primary"
+                           StartIcon="@Icons.Material.Filled.CameraAlt"
+                           Disabled="_procesando"
+                           Size="Size.Small"
+                           OnClick="AgregarFotoCamaraAsync">
+                    @(_procesando ? "Capturando..." : "Agregar foto")
+                </MudButton>
+            }
+
+            @if (_procesando)
+            {
+                <MudProgressLinear Indeterminate="true" Color="Color.Primary" Class="mt-2" />
+            }
+        }
+    </DialogContent>
+
+    <DialogActions>
+        @* Confirmación eliminar marker (inline en actions) *@
+        @if (_confirmarEliminarMarker)
+        {
+            <MudText Typo="Typo.caption" Color="Color.Error" Style="flex:1;padding:0 8px;">
+                ¿Eliminar marker y sus @_fotos.Count foto(s)?
+            </MudText>
+            <MudButton Size="Size.Small" Color="Color.Error" Variant="Variant.Filled"
+                       OnClick="EjecutarEliminarMarkerAsync" Disabled="_procesando">
+                Eliminar
+            </MudButton>
+            <MudButton Size="Size.Small" OnClick="() => _confirmarEliminarMarker = false">
+                Cancelar
+            </MudButton>
+        }
+        else
+        {
+        @* Eliminar marker *@
+        <MudIconButton Icon="@Icons.Material.Filled.DeleteForever"
+                       Color="Color.Error"
+                       title="Eliminar este marker"
+                       Disabled="_punto is null || _procesando"
+                       OnClick="() => _confirmarEliminarMarker = true" />
+        }
+        @* Centrar en mapa *@
+        <MudIconButton Icon="@Icons.Material.Filled.MyLocation"
+                       title="Centrar en mapa"
+                       Disabled="_punto is null"
+                       OnClick="CentrarEnMapaAsync" />
+        @* GEO-US32: Descargar fotos como ZIP (solo web, solo si tiene RemoteId) *@
+        @if (!IsMobile && _punto?.RemoteId.HasValue == true)
+        {
+            <MudIconButton Icon="@Icons.Material.Filled.Download"
+                           title="Descargar fotos como ZIP"
+                           Disabled="_procesando || _fotos.Count == 0"
+                           OnClick="DescargarFotosZipAsync" />
+        }
+        <MudSpacer />
+        <MudButton OnClick="Cancelar">Cerrar</MudButton>
+        <MudButton Color="Color.Primary"
+                   Variant="Variant.Filled"
+                   OnClick="GuardarAsync"
+                   Disabled="_loading || _procesando || _punto is null">
+            @(_procesando ? "Guardando..." : "Guardar")
+        </MudButton>
+    </DialogActions>
+</MudDialog>
+
+@code {
+    private sealed record FotoVista(
+        int LocalId,
+        string NombreArchivo,
+        string DataUrl,
+        LocalFoto Origen);
+
+    [CascadingParameter] private IMudDialogInstance MudDialog { get; set; } = default!;
+    [Parameter] public int PuntoLocalId { get; set; }
+    [Parameter] public bool IsMobile { get; set; }
+    [Parameter] public EventCallback OnEliminarMarker { get; set; }
+
+    private ILocalDbService? _localDb;
+    private ICamaraService? _camara;
+    private IGeoFotoApiClient? _api;
+    private LocalPunto? _punto;
+    private string? _nombre;
+    private string? _descripcion;
+    private string? _comentarioFotoActual;
+    private List<FotoVista> _fotos = new();
+    private int _indiceFoto;
+    private bool _loading = true;
+    private bool _procesando;
+    private bool _visorAbierto;
+    private bool _confirmarEliminarFoto;
+    private bool _confirmarEliminarMarker;
+    private string _dirFotos = Path.Combine(
+        Environment.GetFolderPath(Environment.SpecialFolder.LocalApplicationData), "photos");
+
+    protected override async Task OnInitializedAsync()
+    {
+        _localDb = SP.GetService<ILocalDbService>();
+        _camara = SP.GetService<ICamaraService>();
+        _api = SP.GetService<IGeoFotoApiClient>();
+        if (_localDb is null) { _loading = false; return; }
+
+        await _localDb.InitializeAsync();
+        await CargarAsync();
+        _loading = false;
+    }
+
+    private async Task CargarAsync()
+    {
+        if (_localDb is null) return;
+
+        _punto = await _localDb.GetPuntoAsync(PuntoLocalId);
+        if (_punto is null) return;
+
+        _nombre = _punto.Nombre;
+        _descripcion = _punto.Descripcion;
+
+        var fotos = (await _localDb.GetFotosByPuntoAsync(_punto.LocalId))
+            .Where(f => f.SyncStatus != SyncStatusValues.PendingDelete && !f.IsDeleted)
+            .ToList();
+
+        var dirDetectado = fotos.Select(f => Path.GetDirectoryName(f.RutaLocal))
+                               .FirstOrDefault(d => !string.IsNullOrWhiteSpace(d));
+        if (!string.IsNullOrWhiteSpace(dirDetectado)) _dirFotos = dirDetectado;
+
+        var vistas = new List<FotoVista>(fotos.Count);
+        foreach (var foto in fotos)
+        {
+            var dataUrl = await ConvertirDataUrlAsync(foto.RutaLocal);
+            if (dataUrl is null) continue;
+            vistas.Add(new FotoVista(foto.LocalId, foto.NombreArchivo, dataUrl, foto));
+        }
+
+        _fotos = vistas;
+        if (_indiceFoto >= _fotos.Count)
+            _indiceFoto = _fotos.Count == 0 ? 0 : _fotos.Count - 1;
+
+        ActualizarComentarioActual();
+    }
+
+    private void ActualizarComentarioActual()
+    {
+        _comentarioFotoActual = _fotos.Count > 0 ? _fotos[_indiceFoto].Origen.Comentario : null;
+    }
+
+    private async Task<string?> ConvertirDataUrlAsync(string ruta)
+    {
+        if (string.IsNullOrWhiteSpace(ruta) || !File.Exists(ruta)) return null;
+        var bytes = await File.ReadAllBytesAsync(ruta);
+        var mime = Path.GetExtension(ruta).ToLowerInvariant() switch
+        {
+            ".png" => "image/png",
+            ".webp" => "image/webp",
+            _ => "image/jpeg"
+        };
+        return $"data:{mime};base64,{Convert.ToBase64String(bytes)}";
+    }
+
+    private async Task GuardarComentarioFotoAsync()
+    {
+        if (_localDb is null || _fotos.Count == 0) return;
+        var foto = _fotos[_indiceFoto].Origen;
+        if (_comentarioFotoActual == foto.Comentario) return;
+
+        foto.Comentario = _comentarioFotoActual;
+        foto.UpdatedAt = DateTime.UtcNow.ToString("O");
+
+        if (foto.SyncStatus == SyncStatusValues.PendingCreate || foto.SyncStatus == SyncStatusValues.Local)
+            await _localDb.UpdateFotoAsync(foto);
+        else
+        {
+            foto.SyncStatus = SyncStatusValues.PendingUpdate;
+            await _localDb.UpdateFotoAsync(foto);
+            await _localDb.EnqueueAsync("Update", "Foto", foto.LocalId, JsonSerializer.Serialize(foto));
+        }
+    }
+
+    private async Task GuardarAsync()
+    {
+        if (_localDb is null || _punto is null) return;
+        _procesando = true;
+        try
+        {
+            _punto.Nombre = _nombre;
+            _punto.Descripcion = _descripcion;
+            _punto.UpdatedAt = DateTime.UtcNow.ToString("O");
+
+            if (_punto.SyncStatus == SyncStatusValues.PendingCreate || _punto.SyncStatus == SyncStatusValues.Local)
+            {
+                await _localDb.UpdatePuntoAsync(_punto);
+                await _localDb.UpdatePendingCreatePayloadAsync("Punto", _punto.LocalId, JsonSerializer.Serialize(_punto));
+            }
+            else
+            {
+                _punto.SyncStatus = SyncStatusValues.PendingUpdate;
+                await _localDb.UpdatePuntoAsync(_punto);
+                await _localDb.EnqueueAsync("Update", "Punto", _punto.LocalId, JsonSerializer.Serialize(_punto));
+            }
+
+            Snackbar.Add("Punto actualizado", Severity.Success);
+            MudDialog.Close(DialogResult.Ok(true));
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _procesando = false; }
+    }
+
+    private async Task OnAgregarFotos(IReadOnlyList<IBrowserFile> files)
+    {
+        if (_localDb is null || _punto is null || files.Count == 0) return;
+        _procesando = true;
+        try
+        {
+            foreach (var file in files)
+            {
+                using var ms = new MemoryStream();
+                await using var input = file.OpenReadStream(maxAllowedSize: 52_428_800);
+                await input.CopyToAsync(ms);
+                ms.Position = 0;
+
+                Directory.CreateDirectory(_dirFotos);
+                var ext = string.IsNullOrEmpty(Path.GetExtension(file.Name)) ? ".jpg" : Path.GetExtension(file.Name);
+                var path = Path.Combine(_dirFotos, $"{Guid.NewGuid()}{ext}");
+                await File.WriteAllBytesAsync(path, ms.ToArray());
+
+                var foto = new LocalFoto
+                {
+                    PuntoLocalId = _punto.LocalId,
+                    NombreArchivo = file.Name,
+                    RutaLocal = path,
+                    FechaTomada = DateTime.UtcNow.ToString("O"),
+                    TamanoBytes = ms.Length,
+                    SyncStatus = SyncStatusValues.PendingCreate
+                };
+                var localId = await _localDb.InsertFotoAsync(foto);
+                await _localDb.EnqueueAsync("Create", "Foto", localId, JsonSerializer.Serialize(foto));
+            }
+
+            await CargarAsync();
+            Snackbar.Add($"{files.Count} foto(s) agregada(s)", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Error al agregar: {ex.Message}", Severity.Error); }
+        finally { _procesando = false; StateHasChanged(); }
+    }
+
+    private async Task AgregarFotoCamaraAsync()
+    {
+        if (_camara is null || _localDb is null || _punto is null) return;
+        _procesando = true;
+        try
+        {
+            var stream = await _camara.TomarFotoAsync();
+            if (stream is null) return;
+
+            Directory.CreateDirectory(_dirFotos);
+            var path = Path.Combine(_dirFotos, $"{Guid.NewGuid()}.jpg");
+            await using (var fs = File.Create(path))
+                await stream.CopyToAsync(fs);
+
+            var foto = new LocalFoto
+            {
+                PuntoLocalId = _punto.LocalId,
+                NombreArchivo = Path.GetFileName(path),
+                RutaLocal = path,
+                FechaTomada = DateTime.UtcNow.ToString("O"),
+                TamanoBytes = new FileInfo(path).Length,
+                SyncStatus = SyncStatusValues.PendingCreate
+            };
+            var localId = await _localDb.InsertFotoAsync(foto);
+            await _localDb.EnqueueAsync("Create", "Foto", localId, JsonSerializer.Serialize(foto));
+            await CargarAsync();
+            Snackbar.Add("Foto capturada", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Error cámara: {ex.Message}", Severity.Error); }
+        finally { _procesando = false; StateHasChanged(); }
+    }
+
+    private void PedirConfirmacionEliminarFoto()
+    {
+        _confirmarEliminarFoto = true;
+    }
+
+    private async Task ConfirmarEliminarFotoAsync()
+    {
+        _confirmarEliminarFoto = false;
+        if (_fotos.Count == 0 || _indiceFoto < 0 || _indiceFoto >= _fotos.Count) return;
+        if (_localDb is null) return;
+
+        _procesando = true;
+        try
+        {
+            var foto = _fotos[_indiceFoto].Origen;
+            if (foto.RemoteId.HasValue)
+            {
+                // Sincronizada: soft-delete + SyncQueue (GEO-US25 CA-03)
+                foto.IsDeleted = true;
+                foto.SyncStatus = SyncStatusValues.PendingDelete;
+                await _localDb.UpdateFotoAsync(foto);
+                await _localDb.EnqueueAsync("Delete", "Foto", foto.LocalId, JsonSerializer.Serialize(foto));
+            }
+            else
+            {
+                // Local: delete directo
+                await _localDb.DeleteFotoAsync(foto.LocalId);
+            }
+
+            await CargarAsync();
+            Snackbar.Add("Foto eliminada", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _procesando = false; }
+    }
+
+    private async Task EjecutarEliminarMarkerAsync()
+    {
+        _confirmarEliminarMarker = false;
+        if (_punto is null || _localDb is null) return;
+
+        _procesando = true;
+        try
+        {
+            if (_punto.RemoteId.HasValue)
+            {
+                _punto.IsDeleted = true;
+                _punto.SyncStatus = SyncStatusValues.PendingDelete;
+                await _localDb.UpdatePuntoAsync(_punto);
+                await _localDb.EnqueueAsync("Delete", "Punto", _punto.LocalId, JsonSerializer.Serialize(_punto));
+            }
+            else
+            {
+                await _localDb.DeletePuntoAsync(_punto.LocalId);
+            }
+
+            await OnEliminarMarker.InvokeAsync();
+            Snackbar.Add("Marker eliminado", Severity.Success);
+            MudDialog.Close(DialogResult.Ok("deleted"));
+        }
+        catch (Exception ex) { Snackbar.Add($"Error: {ex.Message}", Severity.Error); }
+        finally { _procesando = false; }
+    }
+
+    private void AbrirVisorAsync(int idx)
+    {
+        _indiceFoto = idx;
+        _visorAbierto = true;
+    }
+
+    private void CerrarVisor(int idx)
+    {
+        _indiceFoto = idx;
+        _visorAbierto = false;
+        ActualizarComentarioActual();
+    }
+
+    private async Task CentrarEnMapaAsync()
+    {
+        if (_punto is not null)
+            await JS.InvokeVoidAsync("leafletInterop.centerOn",
+                (double)_punto.Latitud, (double)_punto.Longitud);
+    }
+
+    private void Cancelar() => MudDialog.Cancel();
+
+    // GEO-US32: Descarga todas las fotos del punto como ZIP vía browser download
+    private async Task DescargarFotosZipAsync()
+    {
+        if (_api is null || _punto?.RemoteId is null) return;
+        _procesando = true;
+        try
+        {
+            var bytes = await _api.DescargarFotosZipAsync(_punto.RemoteId.Value);
+            if (bytes is null || bytes.Length == 0)
+            {
+                Snackbar.Add("El punto no tiene fotos para descargar", Severity.Warning);
+                return;
+            }
+            var nombre = (_punto.Nombre ?? $"punto_{_punto.LocalId}") + ".zip";
+            var base64 = Convert.ToBase64String(bytes);
+            await JS.InvokeVoidAsync("leafletInterop.downloadBlob", base64, nombre, "application/zip");
+            Snackbar.Add("Descarga iniciada", Severity.Success);
+        }
+        catch (Exception ex) { Snackbar.Add($"Error al descargar: {ex.Message}", Severity.Error); }
+        finally { _procesando = false; StateHasChanged(); }
+    }
+}

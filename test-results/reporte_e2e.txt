@@ -1,0 +1,25 @@
+﻿GeoFoto - Reporte E2E Sprint 07
+Fecha: 2026-04-16 13:22:28
+Dispositivo: ZY32GSJ88S
+Paquete: com.companyname.geofoto.mobile
+Script: 07g_capture_sprint07_v5.ps1
+============================================
+
+Resultados por pantalla:
+----------------------------------------
+OK    01  Mapa visible con tiles OSM  (1080 KB)
+OK    02  Marcador posicion propia circulo azul  (1110 KB)
+OK    03  Mapa centrado post-GPS zoom 16  (1110 KB)
+OK    04  Marker de punto existente en mapa  (195 KB)
+OK    08  Lista de markers con busqueda  (105 KB)
+OK    05  Popup del marker abierto MarkerPopup  (1153 KB)
+OK    06  Carrusel de fotos visible en popup  (1153 KB)
+OK    07  Foto ampliada fullscreen FotoViewer  (1501 KB)
+OK    09  Pantalla de sincronizacion EstadoSync  (103 KB)
+OK    10  Badge verde Synced en marker  (1069 KB)
+
+RESUMEN:
+  OK:   10 / 10
+  FAIL: 0 / 10
+
+  RESULTADO: SUCCESS -- 10/10 capturas OK

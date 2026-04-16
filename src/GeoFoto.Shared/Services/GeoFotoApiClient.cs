@@ -17,6 +17,8 @@ public interface IGeoFotoApiClient
     Task<Stream?> DescargarImagenAsync(int fotoId, CancellationToken ct = default);
     Task<SyncDeltaDto> GetSyncDeltaAsync(string? since, CancellationToken ct = default);
     Task<BatchResultDto> SyncBatchAsync(IReadOnlyList<SyncOperationDto> operations, CancellationToken ct = default);
+    // GEO-US32: null → punto no existe o sin fotos (204); bytes → ZIP válido
+    Task<byte[]?> DescargarFotosZipAsync(int puntoRemoteId, CancellationToken ct = default);
 }
 
 public class GeoFotoApiClient : IGeoFotoApiClient
@@ -184,6 +186,21 @@ public class GeoFotoApiClient : IGeoFotoApiClient
         catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
         {
             throw new GeoFotoApiException("Error al enviar batch de sincronización", ex);
+        }
+    }
+
+    public async Task<byte[]?> DescargarFotosZipAsync(int puntoRemoteId, CancellationToken ct = default)
+    {
+        try
+        {
+            var response = await _http.GetAsync($"api/puntos/{puntoRemoteId}/fotos/download", ct);
+            if (response.StatusCode == System.Net.HttpStatusCode.NoContent) return null;
+            response.EnsureSuccessStatusCode();
+            return await response.Content.ReadAsByteArrayAsync(ct);
+        }
+        catch (Exception ex) when (ex is HttpRequestException or TaskCanceledException)
+        {
+            throw new GeoFotoApiException($"Error al descargar ZIP del punto {puntoRemoteId}", ex);
         }
     }
 }

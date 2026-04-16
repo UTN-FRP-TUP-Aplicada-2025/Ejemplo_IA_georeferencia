@@ -11,6 +11,8 @@ public class LocalPunto
     public decimal Longitud { get; set; }
     public string? Nombre { get; set; }
     public string? Descripcion { get; set; }
+    public double RadioMetros { get; set; } = 50;
+    public bool IsDeleted { get; set; } = false;
     public string FechaCreacion { get; set; } = DateTime.UtcNow.ToString("O");
     public string UpdatedAt { get; set; } = DateTime.UtcNow.ToString("O");
     public string SyncStatus { get; set; } = SyncStatusValues.Local;
@@ -28,6 +30,8 @@ public class LocalFoto
     public long TamanoBytes { get; set; }
     public decimal? LatitudExif { get; set; }
     public decimal? LongitudExif { get; set; }
+    public string? Comentario { get; set; }
+    public bool IsDeleted { get; set; } = false;
     public string UpdatedAt { get; set; } = DateTime.UtcNow.ToString("O");
     public string SyncStatus { get; set; } = SyncStatusValues.Local;
 }

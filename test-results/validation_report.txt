@@ -1,0 +1,15 @@
+GeoFoto — Reporte de Validacion Visual
+Fecha: Thu Apr 16 00:55:39     2026
+==========================================
+  [OK]    01_inicio.png — 122KB — Pantalla de inicio / lista inicial
+  [OK]    02_mapa.png — 1448KB — Vista de mapa con geolocalizacion Leaflet
+  [OK]    03_camara.png — 1065KB — Interfaz SubirFotos / camara georreferenciada
+  [OK]    04_lista_fotos.png — 2441KB — Lista de fotos guardadas (MudDataGrid)
+  [OK]    05_sync.png — 19KB — Estado de sincronizacion offline/online
+
+RESUMEN:
+  Capturas OK:      5 / 5
+  Faltantes:        0
+  Posibles corruptas: 0
+
+  RESULTADO: VALIDACION EXITOSA — 5/5 OK

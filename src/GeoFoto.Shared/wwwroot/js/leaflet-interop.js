@@ -62,6 +62,9 @@ window.leafletInterop = {
                 var marker = L.marker([parseFloat(p.latitud), parseFloat(p.longitud)], { icon: icon })
                     .bindPopup(p.nombre || ('Punto #' + p.id + ' (' + p.cantidadFotos + ' fotos)'));
 
+                // GEO-US29: guardar puntoId en el marker para removeMarker()
+                marker._puntoId = p.id;
+
                 marker.on('click', function () {
                     if (dotnetRef) {
                         dotnetRef.invokeMethodAsync('OnMarkerClicked', p.id)
@@ -162,9 +165,85 @@ window.leafletInterop = {
         this.map.flyTo([lat, lng], 16, { duration: 1.2 });
     },
 
+    // ── GEO-US21: Marcador de posición propia (polling 5s) ──────────────────────
+
+    updateUserPosition: function (lat, lng) {
+        if (!this.map) return;
+        if (this._userMarker) this._userMarker.remove();
+        if (this._userAccCircle) this._userAccCircle.remove();
+
+        var icon = L.divIcon({
+            html: '<div style="width:14px;height:14px;background:#2196F3;' +
+                  'border:2px solid white;border-radius:50%;' +
+                  'box-shadow:0 0 0 6px rgba(33,150,243,.25),0 0 0 3px rgba(33,150,243,.4)"></div>',
+            className: 'user-position-marker',
+            iconSize: [18, 18], iconAnchor: [9, 9]
+        });
+
+        this._userMarker = L.marker([lat, lng], { icon: icon, zIndexOffset: 1000 })
+            .bindPopup('<b>Tu posición</b>')
+            .addTo(this.map);
+    },
+
+    clearUserPosition: function () {
+        if (this._userMarker)    { this._userMarker.remove();    this._userMarker    = null; }
+        if (this._userAccCircle) { this._userAccCircle.remove(); this._userAccCircle = null; }
+    },
+
+    // ── GEO-US22: Radio visual configurable del marker ───────────────────────────
+
+    _markerRadii: {},
+
+    showMarkerRadius: function (puntoId, lat, lng, radioMetros) {
+        if (!this.map) return;
+        this.hideMarkerRadius(puntoId);
+        this._markerRadii[puntoId] = L.circle([lat, lng], {
+            radius: radioMetros,
+            color: '#607D8B',
+            fillColor: '#607D8B',
+            fillOpacity: 0.10,
+            weight: 1.5,
+            dashArray: '4 4'
+        }).addTo(this.map);
+    },
+
+    hideMarkerRadius: function (puntoId) {
+        if (this._markerRadii[puntoId]) {
+            this._markerRadii[puntoId].remove();
+            delete this._markerRadii[puntoId];
+        }
+    },
+
+    updateMarkerRadius: function (puntoId, radioMetros) {
+        if (this._markerRadii[puntoId]) {
+            this._markerRadii[puntoId].setRadius(radioMetros);
+        }
+    },
+
+    // ── GEO-US29: Quitar un marker del mapa sin recargar todos ─────────────────
+    removeMarker: function (puntoId) {
+        var idx = this.markers.findIndex(function (m) { return m._puntoId === puntoId; });
+        if (idx >= 0) {
+            this._clusterGroup.removeLayer(this.markers[idx]);
+            this.markers.splice(idx, 1);
+        }
+        // Limpiar también el radio visual si existía
+        this.hideMarkerRadius(puntoId);
+    },
+
     invalidateSize: function () {
         if (this.map) {
             this.map.invalidateSize();
         }
+    },
+
+    // ── GEO-US32: Trigger browser download from base64 bytes ──────────────────
+    downloadBlob: function (base64, filename, mimeType) {
+        var link = document.createElement('a');
+        link.href = 'data:' + mimeType + ';base64,' + base64;
+        link.download = filename;
+        document.body.appendChild(link);
+        link.click();
+        document.body.removeChild(link);
     }
 };

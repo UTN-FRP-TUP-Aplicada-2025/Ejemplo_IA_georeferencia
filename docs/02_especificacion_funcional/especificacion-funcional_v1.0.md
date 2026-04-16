@@ -2,9 +2,9 @@
 
 **Proyecto:** GeoFoto — Registro Georeferenciado de Fotografías Offline-First  
 **Documento:** especificacion-funcional_v1.0.md  
-**Versión:** 1.0  
-**Estado:** Borrador  
-**Fecha:** 2026-04-13  
+**Versión:** 1.1  
+**Estado:** Activo  
+**Fecha:** 2026-04-16  
 **Autor:** Equipo Técnico  
 
 ---
@@ -112,7 +112,7 @@ El técnico de campo abre GeoFoto.Mobile, pulsa el botón "Agregar foto" represe
 
 ---
 
-## F-02 — Captura desde cámara nativa (solo Mobile)
+## F-02 — Captura desde cámara nativa (solo Mobile) [ACTUALIZADO]
 
 **Descripción:** El sistema permite al técnico de campo tomar una fotografía directamente desde la cámara nativa del dispositivo Android, utilizando la API ``MediaPicker`` de .NET MAUI.
 
@@ -121,6 +121,10 @@ Al pulsar el botón de cámara, se invoca ``MediaPicker.Default.CapturePhotoAsyn
 
 **Ejemplo concreto:**  
 El técnico pulsa el ``MudIconButton`` con ícono ``Icons.Material.Filled.CameraAlt`` en la barra de acciones de GeoFoto.Mobile. Se abre la cámara nativa de Android. El técnico fotografía un poste de alumbrado y confirma la captura. El sistema recibe la imagen, detecta coordenadas EXIF (-34.6118, -58.4173), crea un registro en ``Puntos_Local`` con nombre auto-generado "Punto 2026-04-13 09:45:02", guarda la foto en ``Fotos_Local`` y registra la operación en ``SyncQueue``.
+
+**Escenario ESC-02 (Mapa no inicializa):** Si el BlazorWebView no cargó o Leaflet falló al inicializar, se muestra una pantalla de error con el mensaje "Mapa no disponible — intentá reiniciar la aplicación." y un botón "Reintentar" que vuelve a invocar initMap.
+
+**Escenario ESC-03 (GPS sin permiso):** Al iniciar la app, si el GPS no está habilitado o el permiso no fue otorgado: (1) Se muestra dialog nativo de solicitud de permiso. (2) Si el usuario deniega: MudDialog con explicación y botón "Ir a Configuración" (AppInfo.ShowSettingsUI()). (3) Si el usuario niega permanentemente: el mapa carga igual pero sin centrado GPS, con snackbar permanente "Sin permiso de ubicación — el mapa está disponible pero sin tu posición." En ningún caso la app queda bloqueada sin mapa.
 
 ---
 
@@ -196,7 +200,7 @@ El técnico de campo abre el detalle del "Punto 2026-04-13 10:15:33" y pulsa "Ed
 
 ---
 
-## F-09 — Listado de puntos con filtros
+## F-09 — Listado de puntos con filtros [ACTUALIZADO]
 
 **Descripción:** El sistema presenta un listado tabular de todos los puntos georeferenciados con capacidades de búsqueda, filtrado y ordenamiento.
 
@@ -205,6 +209,8 @@ Se utiliza un componente ``MudTable<Punto>`` con paginación del lado del servid
 
 **Ejemplo concreto:**  
 El supervisor accede a la sección "Listado de Puntos" de GeoFoto.Web. Se renderiza un ``MudTable`` con columnas: Nombre, Coordenadas, Fecha de Creación, Nº Fotos y Acciones. La tabla muestra 10 registros por página con un ``MudTablePager``. El supervisor escribe "poste" en el ``MudTextField`` de búsqueda; la tabla se filtra mostrando 3 resultados coincidentes. Al hacer click en el encabezado "Fecha de Creación", los resultados se ordenan de más reciente a más antiguo. Cada fila presenta tres ``MudIconButton``: mapa (``Icons.Material.Filled.Map``), editar (``Icons.Material.Filled.Edit``) y eliminar (``Icons.Material.Filled.Delete``).
+
+**Escenario ESC-01 (Markers superpuestos en sync):** Al sincronizar, el servidor puede devolver markers cuyos radios se superponen con markers locales existentes. La app NO intenta resolver la superposición: los trata como markers completamente independientes y los agrega a SQLite con Status="Synced". No hay merge automático de markers por proximidad en sync.
 
 ---
 
@@ -287,6 +293,126 @@ Durante el push de una operación ``Update``, la API compara el ``UpdatedAt`` de
 
 **Ejemplo concreto:**  
 El técnico renombró offline el punto "Poste #47" a "Poste reparado #47" a las 10:00 UTC (``UpdatedAt = 2026-04-13T10:00:00Z``). Mientras tanto, el supervisor desde GeoFoto.Web renombró el mismo punto a "Poste verificado #47" a las 10:05 UTC (``UpdatedAt = 2026-04-13T10:05:00Z``). Cuando el técnico se conecta a las 10:30, el SyncService envía la actualización del técnico a la API. La API detecta que la versión del servidor (``UpdatedAt = 10:05``) es más reciente que la versión enviada (``UpdatedAt = 10:00``), retorna HTTP 409 con la versión del servidor. El SyncService actualiza el registro local con el nombre "Poste verificado #47", marca ``SyncStatus = Synced``, y elimina la operación de la ``SyncQueue``. No se notifica al usuario de forma intrusiva; el conflicto queda registrado en un log interno accesible desde la vista de diagnóstico.
+
+---
+
+## F-16 — Centrado de mapa en posición GPS actual (Mobile y Web)
+
+**Descripción:** El sistema permite centrar el mapa en la posición GPS actual del usuario tocando un FAB (Mobile) o botón (Web).
+
+**Comportamiento esperado:**
+En Mobile: al tocar el FAB GPS se llama ``IDeviceLocationService.GetCurrentLocationAsync()`` con timeout de 10s. Si OK: ``leafletInterop.setView(lat, lng, 15)``. Si timeout: ``MudSnackbar`` Warning "No se pudo obtener ubicación". Si permiso denegado: se aplica ESC-03. En Web: se usa ``navigator.geolocation.getCurrentPosition()`` del browser.
+
+**Ejemplo concreto:**
+El técnico de campo está en obra y toca el FAB azul de GPS en la esquina inferior derecha. El mapa se centra en sus coordenadas actuales (-34.6037, -58.3816) con zoom 15 en menos de 2 segundos.
+
+---
+
+## F-17 — Marcador de posición propia en mapa
+
+**Descripción:** El sistema muestra la posición actual del usuario en el mapa como un marcador visual diferenciado de los markers de fotos.
+
+**Comportamiento esperado:**
+Se renderiza un ``L.circleMarker`` con animación CSS de pulso (color azul) que se actualiza cada 5 segundos mediante polling. Al perder el GPS, el marcador desaparece y se muestra ``MudSnackbar`` warning. El marcador de posición propia nunca se confunde con un marker de foto.
+
+**Ejemplo concreto:**
+El técnico ve en el mapa un círculo azul pulsante en su posición exacta. Al entrar a un túnel y perder GPS, el círculo desaparece y aparece un snackbar "Sin señal GPS".
+
+---
+
+## F-18 — Radio visual y configurable del marker
+
+**Descripción:** El sistema muestra un círculo semi-transparente alrededor de cada marker representando el radio de agrupación, y permite ajustarlo desde un slider.
+
+**Comportamiento esperado:**
+Al tocar un marker, se muestra un ``L.circle`` semi-transparente representando el radio actual (default 50m, rango 10-500m). En el popup hay un ``MudSlider`` que permite ajustar el radio. El cambio se persiste en ``IPreferencesService`` y SQLite y se aplica globalmente a todos los markers.
+
+**Ejemplo concreto:**
+El técnico toca un marker y ve un círculo de 50m a su alrededor. Mueve el slider a 100m, el círculo se expande en tiempo real. La próxima foto tomada a 80m del marker se asocia a ese marker (dentro del radio) en lugar de crear uno nuevo.
+
+---
+
+## F-19 — Popup de marker con carrusel, título y descripción editables
+
+**Descripción:** Al tocar un marker se abre un ``MudDialog`` con título y descripción editables, carrusel de fotos y acciones.
+
+**Comportamiento esperado:**
+El popup contiene: ``MudTextField`` para Titulo (editable, guarda on-blur), ``MudTextField`` multilínea para Descripcion (editable, guarda on-blur), componente ``FotoCarousel`` con las fotos del punto, botón "Agregar foto" (cámara en Mobile, ``MudFileUpload`` en Web), botón "Eliminar marker" y botón "Cerrar". Todos los cambios se encolan en SyncQueue.
+
+**Ejemplo concreto:**
+El técnico toca el marker "Punto 2026-04-13 10:15:33". Se abre el popup. Edita el nombre a "Poste #47", escribe la descripción "Base dañada" y cierra el campo. El nombre se actualiza en SQLite automáticamente. Al volver al mapa, el marker muestra el nuevo nombre en el popup.
+
+---
+
+## F-20 — Visor fullscreen de fotos con descripción individual
+
+**Descripción:** El sistema permite ampliar cualquier foto del carrusel en modo fullscreen con la posibilidad de editar una descripción individual.
+
+**Comportamiento esperado:**
+Al tocar una foto en el carrusel se abre un ``MudOverlay`` con la imagen a tamaño completo. Hay un ``MudTextField`` para editar el comentario de esa foto específica. El botón ✕ o tap fuera cierra el visor y vuelve al carrusel en la misma posición. En Mobile soporta pinch-to-zoom.
+
+**Ejemplo concreto:**
+El supervisor hace click en la segunda foto del carrusel del punto "Poste #47". Se abre el visor fullscreen mostrando la foto ampliada. Escribe "Vista desde el norte, base claramente dañada" en el campo de descripción y cierra. El comentario queda guardado en SQLite y se encola para sync.
+
+---
+
+## F-21 — Eliminación de foto desde carrusel
+
+**Descripción:** Cada foto del carrusel tiene un botón ✕ que permite eliminarla con confirmación.
+
+**Comportamiento esperado:**
+Al tocar el botón ✕ de una foto aparece un ``MudDialog`` de confirmación: "¿Eliminar esta foto? Esta acción no se puede deshacer." Si confirma: la foto se elimina de SQLite con ``IsDeleted=true``, se encola ``PendingDelete`` en SyncQueue. El carrusel se actualiza sin cerrar el popup.
+
+**Ejemplo concreto:**
+El técnico ve que la primera foto del carrusel está desenfocada. Toca ✕, confirma en el dialog, y la foto desaparece del carrusel instantáneamente mientras el popup permanece abierto.
+
+---
+
+## F-22 — Pantalla de sincronización con estado e historial
+
+**Descripción:** Pantalla dedicada que muestra el estado de sincronización, el historial de operaciones y permite sincronizar manualmente.
+
+**Comportamiento esperado:**
+La pantalla "Sincronización" (accesible desde AppBar) muestra: fecha/hora de última sync (o "Nunca"), cantidad de items pendientes, items fallidos con motivo. Un botón "Sincronizar ahora" dispara ``PushAsync() + PullAsync()`` con spinner durante la operación. La lista de operaciones usa ``MudChip`` por estado: Pending (naranja), Synced (verde), Failed (rojo).
+
+**Ejemplo concreto:**
+El técnico ve en la pantalla de sync que tiene 3 pendientes y 1 fallida. Toca "Sincronizar ahora", el botón muestra spinner durante 4 segundos y la lista se actualiza mostrando todas como Synced.
+
+---
+
+## F-23 — Lista de markers con búsqueda y navegación
+
+**Descripción:** Pantalla que lista todos los markers con búsqueda en tiempo real y acceso directo al mapa y popup.
+
+**Comportamiento esperado:**
+La pantalla "Lista de markers" muestra un ``MudTable`` con: nombre del marker, coordenadas, cantidad de fotos, estado de sync (``MudChip`` con color). Un ``MudTextField`` filtra por nombre en tiempo real. Al tocar un ítem el mapa se centra en ese marker Y se abre el popup.
+
+**Ejemplo concreto:**
+El técnico busca "poste" y aparecen 5 markers que contienen "poste" en el nombre. Toca "Poste #47", la app navega al mapa y abre automáticamente el popup de ese marker.
+
+---
+
+## F-24 — Descarga de fotos de marker como zip (Web)
+
+**Descripción:** En la web, el supervisor puede descargar todas las fotos de un marker como un archivo .zip.
+
+**Comportamiento esperado:**
+En el popup del marker (``IsMobile=false``) aparece el botón "Descargar fotos" (deshabilitado si no hay fotos). Al tocarlo, se llama ``GET /api/puntos/{id}/fotos/download`` que retorna un .zip con las fotos nombradas como ``{nombrePunto}_{n}.jpg``. El browser lo descarga automáticamente.
+
+**Ejemplo concreto:**
+El supervisor en el navegador ve el popup del marker "Poste #47" con 3 fotos. Toca "Descargar fotos" y el browser descarga automáticamente ``Poste_47.zip`` con los 3 archivos.
+
+---
+
+## F-25 — Subida de fotos al marker desde web sin requerir GPS
+
+**Descripción:** En la web, el supervisor puede agregar fotos a un marker existente desde el browser, aunque las fotos no tengan datos EXIF GPS.
+
+**Comportamiento esperado:**
+En el popup del marker (``IsMobile=false``) aparece el botón "Agregar foto" que abre un ``MudFileUpload``. La foto se sube al servidor con el ``PuntoId`` del marker. No se requiere EXIF GPS — la foto queda vinculada al marker por ``PuntoId``. No se muestra error ni advertencia por falta de coordenadas propias (ESC-04). El carrusel se actualiza inmediatamente.
+
+**Ejemplo concreto:**
+El supervisor sube una foto de un documento asociado al poste. La foto no tiene EXIF GPS pero queda vinculada al marker "Poste #47" sin ningún error. El carrusel muestra 4 fotos.
 
 ---
 
@@ -523,6 +649,7 @@ Registro de operaciones pendientes de sincronización con el servidor, implement
 | Versión | Fecha | Descripción |
 |---------|-------|-------------|
 | 1.0 | 2026-04-13 | Versión inicial |
+| 1.1 | 2026-04-16 | Agregados F-16 a F-25 (UX avanzado: GPS FAB, marcador propio, radio, carrusel, fullscreen, eliminar foto, sync panel, lista markers, zip descarga, upload web). Actualizados F-02 con ESC-02/ESC-03 y F-09 con ESC-01. |
 
 ---
 

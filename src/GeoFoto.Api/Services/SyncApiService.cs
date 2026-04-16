@@ -46,7 +46,8 @@ public class SyncApiService : ISyncApiService
                 p.Id, p.Latitud, p.Longitud,
                 p.Nombre, p.Descripcion, p.FechaCreacion,
                 p.Fotos.Count,
-                p.Fotos.OrderBy(f => f.Id).Select(f => (int?)f.Id).FirstOrDefault()))
+                p.Fotos.OrderBy(f => f.Id).Select(f => (int?)f.Id).FirstOrDefault(),
+                p.UpdatedAt))
             .ToListAsync(ct);
 
         var fotos = await fotosQuery

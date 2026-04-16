@@ -11,6 +11,9 @@ public interface IPuntosService
     Task<PuntoDetalleDto?> GetByIdAsync(int id, CancellationToken ct = default);
     Task<PuntoDto?> UpdateAsync(int id, ActualizarPuntoRequest request, CancellationToken ct = default);
     Task<bool> DeleteAsync(int id, CancellationToken ct = default);
+    /// <summary>Retorna (zipBytes, nombreArchivo) o null si el punto no existe.
+    /// Retorna array vacío si el punto existe pero no tiene fotos.</summary>
+    Task<(byte[] ZipBytes, string FileName)?> DescargarFotosZipAsync(int id, CancellationToken ct = default);
 }
 
 public class PuntosService : IPuntosService
@@ -88,5 +91,40 @@ public class PuntosService : IPuntosService
         _db.Puntos.Remove(punto);
         await _db.SaveChangesAsync(ct);
         return true;
+    }
+
+    public async Task<(byte[] ZipBytes, string FileName)?> DescargarFotosZipAsync(
+        int id, CancellationToken ct = default)
+    {
+        var punto = await _db.Puntos.FindAsync([id], ct);
+        if (punto is null) return null;
+
+        var fotos = await _db.Fotos
+            .Where(f => f.PuntoId == id && !f.IsDeleted)
+            .ToListAsync(ct);
+
+        if (fotos.Count == 0)
+            return ([], punto.Nombre ?? $"punto_{id}");
+
+        using var ms = new System.IO.MemoryStream();
+        using (var zip = new System.IO.Compression.ZipArchive(
+                   ms, System.IO.Compression.ZipArchiveMode.Create, leaveOpen: true))
+        {
+            var nombreBase = punto.Nombre ?? $"punto_{id}";
+            foreach (var (foto, n) in fotos.Select((f, i) => (f, i + 1)))
+            {
+                var ext = Path.GetExtension(foto.NombreArchivo);
+                var entryName = $"{nombreBase}_{n}{ext}";
+                var entry = zip.CreateEntry(entryName);
+                var fullPath = _storage.GetFullPath(foto.RutaFisica);
+                if (!System.IO.File.Exists(fullPath)) continue;
+                await using var entryStream = entry.Open();
+                await using var fs = System.IO.File.OpenRead(fullPath);
+                await fs.CopyToAsync(entryStream, ct);
+            }
+        }
+
+        var fileName = $"{punto.Nombre ?? $"punto_{id}"}.zip";
+        return (ms.ToArray(), fileName);
     }
 }

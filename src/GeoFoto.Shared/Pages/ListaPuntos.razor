@@ -226,9 +226,11 @@
 
         if (_localDb is not null)
         {
+            // GEO-US23/28: usar MarkerPopup (carrusel editable, eliminar, ampliar)
             parameters = new DialogParameters();
             parameters.Add("PuntoLocalId", punto.Id);
-            dlgType = typeof(GeoFoto.Shared.Components.DetallePuntoLocal);
+            parameters.Add("IsMobile", false);
+            dlgType = typeof(GeoFoto.Shared.Components.MarkerPopup);
         }
         else
         {
@@ -271,15 +273,35 @@
             try
             {
                 if (_localDb is not null)
-                    await _localDb.DeletePuntoAsync(_puntoAEliminar.Id);
+                {
+                    // GEO-US29: soft-delete si tiene RemoteId, delete directo si es local
+                    var localPunto = await _localDb.GetPuntoAsync(_puntoAEliminar.Id);
+                    if (localPunto is not null)
+                    {
+                        if (localPunto.RemoteId.HasValue)
+                        {
+                            localPunto.IsDeleted = true;
+                            localPunto.SyncStatus = SyncStatusValues.PendingDelete;
+                            await _localDb.UpdatePuntoAsync(localPunto);
+                            await _localDb.EnqueueAsync("Delete", "Punto", localPunto.LocalId,
+                                System.Text.Json.JsonSerializer.Serialize(localPunto));
+                        }
+                        else
+                        {
+                            await _localDb.DeletePuntoAsync(localPunto.LocalId);
+                        }
+                    }
+                }
                 else
+                {
                     await Api.DeletePuntoAsync(_puntoAEliminar.Id);
+                }
                 _puntos.Remove(_puntoAEliminar);
                 Snackbar.Add("Punto eliminado", Severity.Success);
             }
-            catch (GeoFotoApiException ex)
+            catch (GeoFotoApiException)
             {
-                Snackbar.Add($"Error al eliminar el punto", Severity.Error);
+                Snackbar.Add("Error al eliminar el punto", Severity.Error);
             }
             catch
             {

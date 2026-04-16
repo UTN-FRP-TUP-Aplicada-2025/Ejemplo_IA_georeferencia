@@ -78,6 +78,10 @@ La voz de GeoFoto es **profesional, directa y tranquilizadora**. El tono varía 
 | Permiso de ubicación denegado (primera vez) | MudSnackbar Warning | "Sin ubicación GPS — el mapa se muestra en posición predeterminada" |
 | Permiso de ubicación denegado permanentemente | MudDialog | **Título:** "Ubicación deshabilitada" · **Cuerpo:** "GeoFoto necesita acceso a tu ubicación para funcionar correctamente. Podés habilitarla desde la configuración del dispositivo." · **Botón primario:** "Ir a Configuración" · **Botón secundario:** "Continuar sin ubicación" |
 | Permiso de cámara denegado permanentemente | MudDialog | **Título:** "Cámara deshabilitada" · **Cuerpo:** "Para capturar fotos, habilitá el permiso de cámara en la configuración del dispositivo." · **Botón primario:** "Ir a Configuración" · **Botón secundario:** "Cancelar" |
+| ESC-03: GPS sin permiso — denegado, dialog | MudDialog | **Título:** "Permiso de ubicación requerido" · **Cuerpo:** "GeoFoto necesita acceso a tu ubicación para centrar el mapa." · **Botón primario:** "Ir a Configuración" · **Botón secundario:** "Continuar sin GPS" |
+| ESC-03: GPS denegado permanente (snackbar fijo) | MudSnackbar Warning permanente | "Sin permiso de ubicación — el mapa está disponible pero sin tu posición." |
+| ESC-02: Mapa no inicializa | MudAlert Error | "Mapa no disponible — intentá reiniciar la aplicación." · **Botón:** "Reintentar" |
+| Web — permiso geolocation browser denegado | MudAlert Warning | "Permiso de ubicación denegado en el navegador. Habilitalo desde la configuración del sitio." |
 
 ### 4.2 Mapa y Navegación
 
@@ -128,8 +132,16 @@ La voz de GeoFoto es **profesional, directa y tranquilizadora**. El tono varía 
 | Botón agregar fotos | MudButton | "Agregar fotos" |
 | Fotos subiendo | MudButton disabled | "Subiendo..." |
 | Sin fotos | MudText caption | "Sin fotos" |
+| Sin fotos en carrusel — mensaje vacío | MudText Body1 | "Este punto no tiene fotos — usá el botón de cámara para agregar la primera." |
 | Contador de fotos en carrusel | Overlay | "📷 {n} foto(s)" |
 | Indicador de foto actual | MudText caption | "Foto {i} de {n}" |
+| Botón eliminar foto individual (✕) | MudIconButton tooltip | "Quitar esta foto" |
+| Confirmación eliminar foto | MudDialog | **Título:** "Eliminar foto" · **Cuerpo:** "¿Eliminar esta foto? Esta acción no se puede deshacer." · **Botón primario:** "Eliminar" · **Botón secundario:** "Cancelar" |
+| Foto eliminada del carrusel | MudSnackbar Success | "Foto eliminada" |
+| Botón compartir foto (solo Mobile) | MudIconButton tooltip | "Compartir" |
+| Compartir no disponible (Mobile) | MudSnackbar Info | "Función no disponible en este dispositivo." |
+| Botón descargar fotos como zip (solo Web) | MudButton | "Descargar fotos" |
+| Botón descargar fotos — sin fotos (deshabilitado) | MudButton disabled | "Sin fotos para descargar" |
 
 ### 4.6 Visor de Fotos (Fullscreen)
 
@@ -166,6 +178,7 @@ La voz de GeoFoto es **profesional, directa y tranquilizadora**. El tono varía 
 | Situación | Componente | Texto |
 |-----------|-----------|-------|
 | Diálogo de confirmación | MudDialog | **Título:** "Eliminar punto" · **Cuerpo:** "¿Estás seguro de eliminar «{nombre}»? Se eliminarán también las {n} foto(s) asociadas. Esta acción no se puede deshacer." · **Botón primario (destructivo):** "Eliminar" · **Botón secundario:** "Cancelar" |
+| Diálogo de confirmación — eliminar marker (desde popup) | MudDialog | **Título:** "Eliminar marker" · **Cuerpo:** "¿Eliminar este marker y sus {n} fotos? Esta acción no se puede deshacer." · **Botón primario:** "Eliminar" · **Botón secundario:** "Cancelar" |
 | Eliminación exitosa | MudSnackbar Success | "Punto eliminado" |
 | Error al eliminar | MudSnackbar Error | "Error al eliminar el punto" |
 
@@ -305,6 +318,7 @@ Para mantener consistencia, se utilizan los siguientes términos en toda la apli
 | Versión | Fecha | Autor | Descripción |
 |---------|-------|-------|-------------|
 | 1.0 | 2026-04-14 | Equipo Técnico | Creación inicial con catálogo completo de microcopy, principios de escritura y convenciones de componentes. |
+| 1.1 | 2026-04-16 | Equipo Técnico | Sprint 07/08 — Agregados textos para ESC-02 (mapa no disponible), ESC-03 (GPS sin permiso), ESC web (geolocation browser), carrusel sin fotos, eliminar foto, eliminar marker, compartir, descargar zip. |
 
 ---
 

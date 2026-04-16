@@ -143,15 +143,19 @@ public class SyncFlowTests
     }
 
     // ──────────────────────────────────────────
-    // Pull: punto local con SyncStatus = PendingUpdate → no sobreescribir (LWW)
+    // Pull: punto local con PendingUpdate + servidor MÁS VIEJO → local gana (LWW)
     // ──────────────────────────────────────────
     [Fact]
-    public async Task Pull_PuntoLocal_StatusPendingUpdate_NoSobreescribeLocal()
+    public async Task Pull_PuntoLocal_StatusPendingUpdate_LocalMasReciente_NoSobreescribeLocal()
     {
         SetupPushEmpty();
+        var tiempoLocal    = DateTime.UtcNow;
+        var tiempoServidor = tiempoLocal.AddMinutes(-10); // servidor es MÁS VIEJO
+
         var remotePuntos = new List<PuntoDto>
         {
-            new(5, -34.61m, -58.39m, "Nombre remoto", null, DateTime.UtcNow, 0, null)
+            new(5, -34.61m, -58.39m, "Nombre remoto", null,
+                DateTime.UtcNow, 0, null, null, tiempoServidor)
         };
         SetupPull(puntos: remotePuntos);
 
@@ -160,7 +164,8 @@ public class SyncFlowTests
             LocalId    = 10,
             RemoteId   = 5,
             Nombre     = "Edición local pendiente",
-            SyncStatus = SyncStatusValues.PendingUpdate
+            SyncStatus = SyncStatusValues.PendingUpdate,
+            UpdatedAt  = tiempoLocal.ToString("O")  // local es MÁS RECIENTE
         };
         _dbMock.Setup(d => d.FindByRemoteIdAsync(5)).ReturnsAsync(localPendiente);
 
@@ -168,7 +173,44 @@ public class SyncFlowTests
 
         _dbMock.Verify(d => d.UpdatePuntoAsync(It.IsAny<LocalPunto>()),
             Times.Never,
-            "no debe sobreescribir un punto local con PendingUpdate (LWW: cambio local gana)");
+            "LWW: local más reciente gana — no debe sobreescribir con datos del servidor más viejo");
+    }
+
+    // ──────────────────────────────────────────
+    // Pull: punto local con PendingUpdate + servidor MÁS NUEVO → server gana (LWW + Conflict)
+    // CA-S24: T2 > T1 → versión del servidor prevalece
+    // ──────────────────────────────────────────
+    [Fact]
+    public async Task Pull_PuntoLocal_StatusPendingUpdate_ServidorMasReciente_MarcaConflicto()
+    {
+        SetupPushEmpty();
+        var tiempoLocal    = DateTime.UtcNow.AddMinutes(-10); // local es MÁS VIEJO  (T1)
+        var tiempoServidor = DateTime.UtcNow;                  // servidor es MÁS NUEVO (T2)
+
+        var remotePuntos = new List<PuntoDto>
+        {
+            new(5, -34.61m, -58.39m, "Nombre servidor actualizado", "Desc nueva",
+                DateTime.UtcNow, 0, null, null, tiempoServidor)
+        };
+        SetupPull(puntos: remotePuntos);
+
+        var localPendiente = new LocalPunto
+        {
+            LocalId    = 10,
+            RemoteId   = 5,
+            Nombre     = "Edición local más vieja",
+            SyncStatus = SyncStatusValues.PendingUpdate,
+            UpdatedAt  = tiempoLocal.ToString("O")  // local es MÁS VIEJO (T1)
+        };
+        _dbMock.Setup(d => d.FindByRemoteIdAsync(5)).ReturnsAsync(localPendiente);
+
+        await CreateService().SyncNowAsync();
+
+        _dbMock.Verify(d => d.UpdatePuntoAsync(It.Is<LocalPunto>(p =>
+            p.SyncStatus == SyncStatusValues.Conflict &&
+            p.Nombre == "Nombre servidor actualizado")),
+            Times.Once,
+            "CA-S24: cuando el servidor es más reciente (T2 > T1), debe aplicar datos del servidor y marcar Conflict");
     }
 
     // ──────────────────────────────────────────

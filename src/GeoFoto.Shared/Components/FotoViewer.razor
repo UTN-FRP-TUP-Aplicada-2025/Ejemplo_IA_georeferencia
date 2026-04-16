@@ -1,0 +1,135 @@
+@using GeoFoto.Shared.Models
+@using GeoFoto.Shared.Services
+@using Microsoft.Extensions.DependencyInjection
+@inject IServiceProvider SP
+@inject ISnackbar Snackbar
+
+@* ── GEO-US26: Visor fullscreen de foto con comentario editable ──────────────
+   Parámetros:
+     Foto           — LocalFoto a mostrar
+     DataUrl        — data:image/...;base64,... cargado por el componente padre
+     IndiceActual   — posición en el carrusel (para retornar al cerrar)
+     OnCerrar       — callback(indice) al cerrar el overlay
+*@
+
+<MudOverlay @bind-Visible="_visible" DarkBackground="true" AutoClose="false"
+            Style="z-index:9999;display:flex;align-items:center;justify-content:center;">
+
+    <div style="position:relative;width:100vw;height:100vh;
+                display:flex;flex-direction:column;align-items:center;justify-content:center;">
+
+        @* Botón cerrar *@
+        <MudIconButton Icon="@Icons.Material.Filled.Close"
+                       Color="Color.Inherit"
+                       Style="position:absolute;top:12px;right:12px;
+                              color:white;background:rgba(0,0,0,.55);z-index:10;"
+                       OnClick="Cerrar" />
+
+        @* Contador *@
+        <MudText Typo="Typo.caption"
+                 Style="position:absolute;top:16px;left:16px;color:rgba(255,255,255,.8);">
+            @(IndiceActual + 1) de @TotalFotos
+        </MudText>
+
+        @* Imagen *@
+        @if (!string.IsNullOrEmpty(DataUrl))
+        {
+            <img src="@DataUrl"
+                 alt="@(Foto?.NombreArchivo ?? "Foto")"
+                 style="max-width:100vw;max-height:75vh;object-fit:contain;
+                        border-radius:4px;touch-action:pinch-zoom;" />
+        }
+
+        @* Comentario editable *@
+        @if (Foto is not null)
+        {
+            <div style="width:min(90vw,560px);margin-top:16px;">
+                <MudTextField @bind-Value="_comentario"
+                              Label="Comentario de la foto"
+                              Placeholder="Agregar descripción..."
+                              Variant="Variant.Outlined"
+                              Lines="2"
+                              FullWidth="true"
+                              Style="background:rgba(255,255,255,.12);border-radius:6px;"
+                              @onblur="GuardarComentarioAsync" />
+            </div>
+
+            @* Metadatos *@
+            <MudStack Row="true" Spacing="1" Class="mt-2">
+                @if (Foto.FechaTomada is not null)
+                {
+                    <MudChip T="string" Size="Size.Small"
+                             Icon="@Icons.Material.Filled.Schedule"
+                             Style="background:rgba(255,255,255,.15);color:white;">
+                        @FormatFecha(Foto.FechaTomada)
+                    </MudChip>
+                }
+                @if (Foto.LatitudExif.HasValue)
+                {
+                    <MudChip T="string" Size="Size.Small"
+                             Icon="@Icons.Material.Filled.LocationOn"
+                             Style="background:rgba(255,255,255,.15);color:white;">
+                        @Foto.LatitudExif!.Value.ToString("F4")°,
+                        @Foto.LongitudExif!.Value.ToString("F4")°
+                    </MudChip>
+                }
+            </MudStack>
+        }
+    </div>
+</MudOverlay>
+
+@code {
+    [Parameter] public LocalFoto? Foto { get; set; }
+    [Parameter] public string? DataUrl { get; set; }
+    [Parameter] public int IndiceActual { get; set; }
+    [Parameter] public int TotalFotos { get; set; } = 1;
+    [Parameter] public EventCallback<int> OnCerrar { get; set; }
+
+    private bool _visible = true;
+    private string? _comentario;
+    private ILocalDbService? _localDb;
+
+    protected override void OnInitialized()
+    {
+        _localDb = SP.GetService<ILocalDbService>();
+        _comentario = Foto?.Comentario;
+    }
+
+    protected override void OnParametersSet()
+    {
+        _comentario = Foto?.Comentario;
+    }
+
+    private async Task GuardarComentarioAsync()
+    {
+        if (_localDb is null || Foto is null) return;
+        if (_comentario == Foto.Comentario) return; // sin cambios
+
+        Foto.Comentario = _comentario;
+        Foto.UpdatedAt = DateTime.UtcNow.ToString("O");
+
+        var estadoOriginal = Foto.SyncStatus;
+        if (estadoOriginal == SyncStatusValues.PendingCreate || estadoOriginal == SyncStatusValues.Local)
+        {
+            await _localDb.UpdateFotoAsync(Foto);
+        }
+        else
+        {
+            Foto.SyncStatus = SyncStatusValues.PendingUpdate;
+            await _localDb.UpdateFotoAsync(Foto);
+            await _localDb.EnqueueAsync("Update", "Foto", Foto.LocalId,
+                System.Text.Json.JsonSerializer.Serialize(Foto));
+        }
+
+        Snackbar.Add("Comentario guardado", Severity.Success);
+    }
+
+    private async Task Cerrar()
+    {
+        _visible = false;
+        await OnCerrar.InvokeAsync(IndiceActual);
+    }
+
+    private string FormatFecha(string? iso) =>
+        DateTime.TryParse(iso, out var dt) ? dt.ToLocalTime().ToString("dd/MM/yy HH:mm") : (iso ?? "");
+}
