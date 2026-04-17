@@ -111,74 +111,8 @@ public class SyncService : ISyncService
         var fotoCreates = pendientes.Where(p => p is { OperationType: "Create", EntityType: "Foto" }).ToList();
         var batched = pendientes.Except(fotoCreates).ToList();
 
-        // Push foto creates individually (direct upload)
-        foreach (var op in fotoCreates)
-        {
-            try
-            {
-                var payload = JsonSerializer.Deserialize<FotoSyncPayload>(op.Payload,
-                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
-
-                if (payload is null)
-                {
-                    await _localDb.MarkFailedAsync(op.Id, "Payload inválido");
-                    failed++;
-                    continue;
-                }
-
-                // Get the punto's RemoteId
-                var localPunto = await _localDb.GetPuntoAsync(payload.PuntoLocalId);
-                if (localPunto?.RemoteId is null)
-                {
-                    // Punto not yet pushed — skip this foto for now
-                    continue;
-                }
-
-                if (!File.Exists(payload.RutaLocal))
-                {
-                    await _localDb.MarkFailedAsync(op.Id, "Archivo de foto no encontrado");
-                    failed++;
-                    continue;
-                }
-
-                await using var stream = File.OpenRead(payload.RutaLocal);
-                var ext = Path.GetExtension(payload.NombreArchivo).ToLowerInvariant();
-                var mime = ext == ".png" ? "image/png" : "image/jpeg";
-
-                await _api.AgregarFotoAPuntoAsync(
-                    localPunto.RemoteId.Value, stream, payload.NombreArchivo, mime, ct);
-
-                await _localDb.MarkDoneAsync(op.Id);
-
-                // Update local foto RemoteId (we don't get it back from this endpoint, mark synced)
-                var localFoto = await _localDb.GetFotoAsync(op.LocalId);
-                if (localFoto is not null)
-                {
-                    localFoto.SyncStatus = SyncStatusValues.Synced;
-                    await _localDb.UpdateFotoAsync(localFoto);
-                }
-
-                successful++;
-            }
-            catch (HttpRequestException)
-            {
-                _logger.LogWarning("Sin red durante push de foto — dejando pendiente");
-                break;
-            }
-            catch (Exception ex)
-            {
-                _logger.LogError(ex, "Error al pushear foto {LocalId}", op.LocalId);
-                await _localDb.IncrementAttemptsAsync(op.Id);
-                if (op.Attempts + 1 >= 3)
-                {
-                    await _localDb.MarkFailedAsync(op.Id, ex.Message);
-                    failed++;
-                    errors.Add(ex.Message);
-                }
-            }
-        }
-
-        // Push non-foto-create operations via batch
+        // 1) Push non-foto-create operations via batch PRIMERO (Punto Create obtiene RemoteId)
+        //    Así cuando subamos fotos en el paso 2, el punto ya existe en el servidor.
         var batches = batched.Chunk(50);
         foreach (var batch in batches)
         {
@@ -227,6 +161,72 @@ public class SyncService : ISyncService
             {
                 _logger.LogWarning("Sin red durante push — dejando pendientes");
                 break;
+            }
+        }
+
+        // 2) Push foto creates individualmente DESPUÉS del batch, así el Punto ya tiene RemoteId
+        foreach (var op in fotoCreates)
+        {
+            try
+            {
+                var payload = JsonSerializer.Deserialize<FotoSyncPayload>(op.Payload,
+                    new JsonSerializerOptions { PropertyNameCaseInsensitive = true });
+
+                if (payload is null)
+                {
+                    await _localDb.MarkFailedAsync(op.Id, "Payload inválido");
+                    failed++;
+                    continue;
+                }
+
+                // Leer RemoteId del punto (ya debería estar disponible tras el batch)
+                var localPunto = await _localDb.GetPuntoAsync(payload.PuntoLocalId);
+                if (localPunto?.RemoteId is null)
+                {
+                    // Punto todavía sin RemoteId (falló el batch o ya existía pendiente) — reintentar en próximo ciclo
+                    continue;
+                }
+
+                if (!File.Exists(payload.RutaLocal))
+                {
+                    await _localDb.MarkFailedAsync(op.Id, "Archivo de foto no encontrado");
+                    failed++;
+                    continue;
+                }
+
+                await using var stream = File.OpenRead(payload.RutaLocal);
+                var ext = Path.GetExtension(payload.NombreArchivo).ToLowerInvariant();
+                var mime = ext == ".png" ? "image/png" : "image/jpeg";
+
+                await _api.AgregarFotoAPuntoAsync(
+                    localPunto.RemoteId.Value, stream, payload.NombreArchivo, mime, ct);
+
+                await _localDb.MarkDoneAsync(op.Id);
+
+                var localFoto = await _localDb.GetFotoAsync(op.LocalId);
+                if (localFoto is not null)
+                {
+                    localFoto.SyncStatus = SyncStatusValues.Synced;
+                    await _localDb.UpdateFotoAsync(localFoto);
+                }
+
+                successful++;
+            }
+            catch (HttpRequestException)
+            {
+                _logger.LogWarning("Sin red durante push de foto — dejando pendiente");
+                break;
+            }
+            catch (Exception ex)
+            {
+                _logger.LogError(ex, "Error al pushear foto {LocalId}", op.LocalId);
+                await _localDb.IncrementAttemptsAsync(op.Id);
+                if (op.Attempts + 1 >= 3)
+                {
+                    await _localDb.MarkFailedAsync(op.Id, ex.Message);
+                    failed++;
+                    errors.Add(ex.Message);
+                }
             }
         }
 

@@ -149,6 +149,7 @@ else
     private IAppConfigService? _appConfigService;
     private IRadioAssociationService? _radioService;
     private int? _marcadorActivoId; // LocalId del marker seleccionado (MEJORA 3)
+    private int _radioActualMetros = 50; // GEO-US22: radio de agrupación actual (default 50 m)
 
     // GEO-US21 — Polling de posición propia cada 5 segundos
     private CancellationTokenSource? _posicionCts;
@@ -182,6 +183,7 @@ else
         {
             var radio = await _appConfigService.GetRadioAgrupacionMetrosAsync();
             _radioService.Configure(new AppConfig { RadioAsociacionMetros = radio });
+            _radioActualMetros = radio;
         }
 
         // Lanzar GPS de inmediato para pedir permisos antes de que el mapa se inicialice
@@ -733,8 +735,11 @@ else
             if (_mapaListo)
             {
                 await JS.InvokeVoidAsync("leafletInterop.addMarkers", _puntos, _dotnetRef, false);
+                await RefrescarRadioCirculosAsync();
                 await JS.InvokeVoidAsync("leafletInterop.invalidateSize");
             }
+            // Forzar re-render de Blazor con los _puntos actualizados
+            await InvokeAsync(StateHasChanged);
         }
         catch (Exception ex)
         {
@@ -763,7 +768,11 @@ else
         {
             await _appConfigService.SetRadioAgrupacionMetrosAsync(nuevoRadio);
             _radioService?.Configure(new AppConfig { RadioAsociacionMetros = nuevoRadio });
+            _radioActualMetros = nuevoRadio;
             Snackbar.Add($"Radio de agrupación actualizado a {nuevoRadio} m", Severity.Info);
+            // GEO-US22: refrescar círculos visibles en el mapa con el nuevo radio
+            if (_mapaListo)
+                await RefrescarRadioCirculosAsync();
         }
     }
 
@@ -813,6 +822,24 @@ else
                 }
             }
         }, token);
+    }
+
+    // GEO-US22: dibuja/actualiza los círculos de radio de agrupación en todos los markers visibles
+    private async Task RefrescarRadioCirculosAsync()
+    {
+        if (!_mapaListo) return;
+        foreach (var p in _puntos)
+        {
+            try
+            {
+                await JS.InvokeVoidAsync("leafletInterop.showMarkerRadius",
+                    p.Id, (double)p.Latitud, (double)p.Longitud, _radioActualMetros);
+            }
+            catch (Exception ex)
+            {
+                Logger.LogWarning(ex, "showMarkerRadius falló para punto {Id}", p.Id);
+            }
+        }
     }
 
     public void Dispose()

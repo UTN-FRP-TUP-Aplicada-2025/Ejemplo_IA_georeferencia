@@ -38,11 +38,31 @@ window.leafletInterop = {
     },
 
     addMarkers: function (puntos, dotnetRef, fitBounds) {
-        if (!this.map || !this._clusterGroup) return;
+        if (!this.map) return;
         try {
+            // Recrear el cluster group en cada llamada para evitar estado inválido
+            // tras la pausa/reanudación del WebView (ej: volver de la cámara en Android)
+            if (this._clusterGroup) {
+                this.map.removeLayer(this._clusterGroup);
+            }
+            this._clusterGroup = L.markerClusterGroup({
+                maxClusterRadius: 60,
+                spiderfyOnMaxZoom: true,
+                showCoverageOnHover: false,
+                iconCreateFunction: function (cluster) {
+                    var count = cluster.getChildCount();
+                    var size = count < 10 ? 'small' : count < 50 ? 'medium' : 'large';
+                    return L.divIcon({
+                        html: '<div class="cluster-' + size + '"><span>' + count + '</span></div>',
+                        className: 'marker-cluster',
+                        iconSize: L.point(40, 40)
+                    });
+                }
+            });
+            this.map.addLayer(this._clusterGroup);
+
             var shouldFitBounds = fitBounds !== false;
             this._dotnetRef = dotnetRef;
-            this._clusterGroup.clearLayers();
             this.markers = [];
 
             puntos.forEach(function (p) {
@@ -196,15 +216,17 @@ window.leafletInterop = {
 
     showMarkerRadius: function (puntoId, lat, lng, radioMetros) {
         if (!this.map) return;
-        this.hideMarkerRadius(puntoId);
-        this._markerRadii[puntoId] = L.circle([lat, lng], {
-            radius: radioMetros,
-            color: '#607D8B',
-            fillColor: '#607D8B',
-            fillOpacity: 0.10,
-            weight: 1.5,
-            dashArray: '4 4'
-        }).addTo(this.map);
+        try {
+            this.hideMarkerRadius(puntoId);
+            this._markerRadii[puntoId] = L.circle([lat, lng], {
+                radius: radioMetros,
+                color: '#607D8B',
+                fillColor: '#607D8B',
+                fillOpacity: 0.10,
+                weight: 1.5,
+                dashArray: '4 4'
+            }).addTo(this.map);
+        } catch (e) { console.warn('[GeoFoto] showMarkerRadius:', e); }
     },
 
     hideMarkerRadius: function (puntoId) {
